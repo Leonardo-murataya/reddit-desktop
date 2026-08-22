@@ -8,9 +8,11 @@ import PresetsHub from './components/PresetsHub';
 import IntegrationsPanel from './components/IntegrationsPanel';
 import UpdateModal from './components/UpdateModal';
 import FloatingProgressDock from './components/FloatingProgressDock';
+import { Cpu, Film, Sparkles, RefreshCw, Zap, Bell, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
   // Estados cargados desde el servidor
   const [profiles, setProfiles] = useState([]);
@@ -104,55 +106,51 @@ export default function App() {
       const templatesData = await templatesRes.json();
       setTemplates(templatesData);
 
-      // 5. Obtener Biblioteca de Videos
-      if (settingsData.backgroundFolder) {
-        refreshBackgroundVideos(settingsData.backgroundFolder);
-      }
+      // 5. Refrescar Videos de Fondo
+      refreshBackgroundVideos(settingsData.backgroundFolder);
 
-      // 6. Verificar actualizaciones de GitHub al abrir la aplicación
-      checkForUpdates(settingsData);
-    } catch (error) {
-      console.error('Error cargando especificaciones del backend local:', error);
-    }
-  };
-
-  const checkForUpdates = async (currentSettings) => {
-    try {
-      const res = await fetch('/api/updater/check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          githubRepo: currentSettings?.githubRepo,
-          githubToken: currentSettings?.githubToken
-        })
-      });
-      const data = await res.json();
-      if (data && data.hasUpdate) {
-        setUpdateInfo(data);
-        setShowUpdateModal(true);
+      // 6. Verificar actualización silenciosa de fondo al arrancar si está habilitado
+      if (settingsData.autoCheckUpdate !== false) {
+        fetch('/api/updates/check')
+          .then(r => r.json())
+          .then(info => {
+            if (info && info.hasUpdate) {
+              setUpdateInfo(info);
+              setShowUpdateModal(true);
+            }
+          })
+          .catch(e => console.log('Sin conexión de actualización:', e.message));
       }
     } catch (err) {
-      console.log('Verificación automática de actualizaciones omitida:', err.message);
+      console.error('Error cargando datos iniciales:', err);
     }
   };
 
-  const refreshBackgroundVideos = async (folder = '', profileId = 'global') => {
+  const refreshBackgroundVideos = async (folder, profileId) => {
     try {
-      const activeFolder = folder || settings.backgroundFolder || '';
-      if (!activeFolder) return;
-      const res = await fetch(`/api/background-videos?folder=${encodeURIComponent(activeFolder)}&profileId=${profileId}`);
+      let targetFolder = folder;
+      if (!targetFolder && profileId && profiles.length > 0) {
+        const prof = profiles.find(p => p.id === profileId);
+        if (prof && prof.backgroundFolder) {
+          targetFolder = prof.backgroundFolder;
+        }
+      }
+      if (!targetFolder && settings.backgroundFolder) {
+        targetFolder = settings.backgroundFolder;
+      }
+
+      const res = await fetch('/api/background/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: targetFolder || '', profileId: profileId || '' })
+      });
       const data = await res.json();
       setBackgroundStatus(data);
     } catch (err) {
-      console.error('Error al actualizar biblioteca de fondos:', err);
+      console.error('Error al consultar videos de fondo:', err);
     }
   };
 
-  // ----------------------------------------------------
-  // MANEJADORES DE ACCIÓN API
-  // ----------------------------------------------------
-
-  // Guardar Ajustes
   const handleSaveSettings = async (newSettings) => {
     try {
       const res = await fetch('/api/settings', {
@@ -161,25 +159,15 @@ export default function App() {
         body: JSON.stringify(newSettings)
       });
       const data = await res.json();
-      if (data.success) {
-        setSettings(data.settings);
-        
-        // Recargar la detección de hardware para actualizar el Sidebar en tiempo real
-        const gpuRes = await fetch('/api/detect-hardware');
-        const gpuData = await gpuRes.json();
-        setGpuInfo(gpuData);
-
-        // Escanear carpeta si cambió
-        if (newSettings.backgroundFolder) {
-          refreshBackgroundVideos(newSettings.backgroundFolder);
-        }
-      }
+      setSettings(data);
+      refreshBackgroundVideos(data.backgroundFolder);
+      return { success: true };
     } catch (err) {
-      console.error('Error al guardar ajustes:', err);
+      console.error(err);
+      return { success: false, error: err.message };
     }
   };
 
-  // Guardar Perfil de IA
   const handleSaveProfile = async (profile) => {
     try {
       const res = await fetch('/api/profiles', {
@@ -188,56 +176,26 @@ export default function App() {
         body: JSON.stringify(profile)
       });
       const data = await res.json();
-      if (data.success) {
-        // Recargar perfiles
-        const pRes = await fetch('/api/profiles');
-        const pData = await pRes.json();
-        setProfiles(pData);
-        return data.profile;
-      }
+      setProfiles(data);
+      return { success: true };
     } catch (err) {
-      console.error('Error al guardar perfil de IA:', err);
-    }
-  };
-
-  // Eliminar Perfil de IA
-  const handleDeleteProfile = async (id) => {
-    try {
-      const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
-      const data = await res.json();
-      if (data.success) {
-        const pRes = await fetch('/api/profiles');
-        const pData = await pRes.json();
-        setProfiles(pData);
-      }
-    } catch (err) {
-      console.error('Error al eliminar perfil de IA:', err);
-    }
-  };
-
-  // Importar Paquete de Plantilla (Plantilla + Perfil de IA asociado sin API Key)
-  const handleImportTemplatePackage = async (templatePackage) => {
-    try {
-      const res = await fetch('/api/templates/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(templatePackage)
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTemplates(data.templates);
-        setProfiles(data.profiles);
-        return { success: true, newTemplateId: data.newTemplateId };
-      } else {
-        return { success: false, error: data.error || 'Error al importar el paquete de plantilla.' };
-      }
-    } catch (err) {
-      console.error('Error al importar paquete de plantilla:', err);
+      console.error(err);
       return { success: false, error: err.message };
     }
   };
 
-  // Guardar Plantilla de Video
+  const handleDeleteProfile = async (id) => {
+    try {
+      const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      setProfiles(data);
+      return { success: true };
+    } catch (err) {
+      console.error(err);
+      return { success: false, error: err.message };
+    }
+  };
+
   const handleSaveTemplate = async (template) => {
     try {
       const res = await fetch('/api/templates', {
@@ -246,87 +204,104 @@ export default function App() {
         body: JSON.stringify(template)
       });
       const data = await res.json();
-      if (data.success) {
-        const tRes = await fetch('/api/templates');
-        const tData = await tRes.json();
-        setTemplates(tData);
-        return data.template; // Retornamos la plantilla guardada (con su nuevo ID)
-      }
+      setTemplates(data);
+      return { success: true };
     } catch (err) {
-      console.error('Error al guardar plantilla:', err);
+      console.error(err);
+      return { success: false, error: err.message };
     }
-    return null;
   };
 
-  // Eliminar Plantilla de Video
   const handleDeleteTemplate = async (id) => {
     try {
       const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
       const data = await res.json();
-      if (data.success) {
-        const tRes = await fetch('/api/templates');
-        const tData = await tRes.json();
-        setTemplates(tData);
-      }
+      setTemplates(data);
+      return { success: true };
     } catch (err) {
-      console.error('Error al eliminar plantilla:', err);
+      console.error(err);
+      return { success: false, error: err.message };
     }
   };
 
-  // Lanzamiento Express unificado desde el Hub de Plantillas
-  const handleLaunchExpress = async (launchParams) => {
+  const handleImportTemplatePackage = async (importedTemplate, importedProfile) => {
+    try {
+      if (importedProfile) {
+        const profRes = await fetch('/api/profiles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(importedProfile)
+        });
+        const profData = await profRes.json();
+        setProfiles(profData);
+      }
+
+      if (importedTemplate) {
+        const tempRes = await fetch('/api/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(importedTemplate)
+        });
+        const tempData = await tempRes.json();
+        setTemplates(tempData);
+      }
+
+      return { success: true };
+    } catch (err) {
+      console.error('Error importando paquete:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  const handleLaunchExpress = async (preset) => {
     setExpressLaunchError('');
     try {
-      // Leer ajustes frescos y perfiles frescos del servidor para garantizar que todo esté actualizado
-      const [freshSettingsRes, freshProfilesRes] = await Promise.all([
-        fetch('/api/settings'),
-        fetch('/api/profiles')
-      ]);
-      const freshSettings = await freshSettingsRes.json();
-      const freshProfiles = await freshProfilesRes.json();
-      if (freshSettings) setSettings(freshSettings);
-      if (freshProfiles) setProfiles(freshProfiles);
+      const defaultTemp = templates.find(t => t.id === settings.defaultTemplateId) || templates[0];
+      const defaultProf = profiles.find(p => p.id === (defaultTemp?.profileId || settings.defaultProfileId)) || profiles[0];
 
-      let bgFolder = '';
-      let finalProfileId = '';
+      let requestBody = {};
 
-      if (launchParams.batch) {
-        bgFolder = freshSettings.backgroundFolder || settings.backgroundFolder || '';
-        if (!bgFolder) {
-          const hasBg = launchParams.batch.some(item => {
-            const t = templates.find(temp => temp.id === item.templateId);
-            const pId = t?.profileId || freshSettings.defaultProfileId;
-            const prof = freshProfiles.find(p => p.id === pId);
-            return prof && prof.backgroundFolder && prof.backgroundFolder.trim();
-          });
-          if (hasBg) bgFolder = 'dynamic';
-        }
-      } else {
-        const template = templates.find(t => t.id === launchParams.templateId);
-        finalProfileId = launchParams.profileId || template?.profileId || freshSettings.defaultProfileId || settings.defaultProfileId || profiles[0]?.id;
-        const profile = freshProfiles.find(p => p.id === finalProfileId);
-        bgFolder = (profile && profile.backgroundFolder && profile.backgroundFolder.trim())
-          ? profile.backgroundFolder
-          : (freshSettings.backgroundFolder || settings.backgroundFolder || '');
-      }
+      if (preset.type === 'chain') {
+        const activeSeeds = [];
+        let hasEmpty = false;
 
-      if (!bgFolder) {
-        setExpressLaunchError('No hay carpeta de videos de fondo configurada. Ve a Ajustes o al perfil seleccionado y selecciona una carpeta primero.');
-        return;
-      }
-
-      const requestBody = launchParams.batch 
-        ? {
-            batch: launchParams.batch,
-            backgroundFolder: bgFolder === 'dynamic' ? '' : bgFolder
+        for (const item of preset.chain) {
+          const pSeeds = item.seeds || [];
+          for (let i = 0; i < item.count; i++) {
+            const prompt = (pSeeds[i] || '').trim();
+            if (!prompt) hasEmpty = true;
+            activeSeeds.push({
+              prompt,
+              templateId: item.templateId,
+              profileId: item.profileId
+            });
           }
-        : {
-            prompt: launchParams.prompt,
-            count: launchParams.count,
-            profileId: finalProfileId,
-            templateId: launchParams.templateId,
-            backgroundFolder: bgFolder
-          };
+        }
+
+        if (activeSeeds.length === 0) {
+          throw new Error('La cadena de perfiles no tiene videos configurados.');
+        }
+        if (hasEmpty) {
+          throw new Error('Todos los videos de la cadena deben tener un tema antes de lanzar.');
+        }
+
+        requestBody = { seeds: activeSeeds };
+      } else {
+        const count = preset.count || 1;
+        const seeds = [];
+        for (let i = 0; i < count; i++) {
+          const prompt = (preset.prompts && preset.prompts[i]) ? preset.prompts[i].trim() : '';
+          if (!prompt) {
+            throw new Error(`El video #${i + 1} del preset no tiene un tema o prompt definido.`);
+          }
+          seeds.push({
+            prompt,
+            templateId: preset.templateId || defaultTemp?.id || '',
+            profileId: preset.profileId || defaultProf?.id || ''
+          });
+        }
+        requestBody = { seeds };
+      }
 
       const res = await fetch('/api/generate', {
         method: 'POST',
@@ -339,10 +314,7 @@ export default function App() {
         return;
       }
       
-      // Agregar log inmediato de inicio
-      setJobLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Solicitud de generación enviada al servidor...`]);
-      
-      // Solo redirigir al Panel de Control si el job se inició correctamente
+      setJobLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] Solicitud de generación rápida enviada al servidor...`]);
       setActiveTab('dashboard');
     } catch (err) {
       console.error(err);
@@ -389,92 +361,153 @@ export default function App() {
     }
   };
 
+  const getTabTitle = () => {
+    switch (activeTab) {
+      case 'dashboard': return 'Panel de Control · Studio';
+      case 'presets': return 'Generación Rápida & Lotes';
+      case 'templates': return 'Diseñador de Plantillas';
+      case 'profiles': return 'Perfiles de IA & Prompts';
+      case 'settings': return 'Ajustes de Render & GPU';
+      case 'integrations': return 'Integraciones & Actualizaciones';
+      default: return 'Reddit Studio Desktop';
+    }
+  };
+
   return (
-    <div className="flex bg-bg-dark min-h-screen text-gray-100 relative">
-      {/* Sidebar de navegación */}
-      <Sidebar 
-        activeTab={activeTab} 
-        setActiveTab={setActiveTab} 
-        gpuInfo={gpuInfo}
-      />
+    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#07090e] text-gray-100 select-none">
+      
+      {/* 1. Header Bar Superior de la Aplicación de Escritorio */}
+      <header className="h-12 border-b border-white/5 bg-[#090d16] px-5 flex items-center justify-between shrink-0 z-30 select-none">
+        {/* Breadcrumb de Navegación */}
+        <div className="flex items-center gap-2.5 text-xs">
+          <span className="font-extrabold text-brand-primary flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 fill-current" />
+            <span>REDDIT STUDIO</span>
+          </span>
+          <span className="text-gray-600 font-black">/</span>
+          <span className="font-bold text-gray-300">{getTabTitle()}</span>
+        </div>
 
-      {/* Panel de Contenido Principal */}
-      <main className="flex-1 p-5 overflow-y-auto w-full min-w-0 pb-24">
-        {activeTab === 'dashboard' && (
-          <Dashboard 
-            profiles={profiles} 
-            templates={templates} 
-            settings={settings}
-            backgroundStatus={backgroundStatus}
-            refreshBackground={() => refreshBackgroundVideos()}
-            activeJob={activeJob}
-            logs={jobLogs}
-            jobError={jobError}
-            jobSuccess={jobSuccess}
-            onClearJobError={() => setJobError('')}
-            onClearJobSuccess={() => setJobSuccess('')}
-            onLogsInit={(initLogs) => setJobLogs(initLogs)}
-          />
-        )}
-        
-        {activeTab === 'presets' && (
-          <PresetsHub 
-            templates={templates} 
-            profiles={profiles}
-            settings={settings}
-            backgroundStatus={backgroundStatus}
-            onLaunchExpress={handleLaunchExpress}
-            launchError={expressLaunchError}
-            onClearLaunchError={() => setExpressLaunchError('')}
-          />
-        )}
-        
-        {activeTab === 'templates' && (
-          <TemplateEditor 
-            templates={templates} 
-            profiles={profiles}
-            onSave={handleSaveTemplate}
-            onDelete={handleDeleteTemplate}
-            onImport={handleImportTemplatePackage}
-          />
-        )}
-        
-        {activeTab === 'profiles' && (
-          <ProfilesEditor 
-            profiles={profiles} 
-            onSave={handleSaveProfile}
-            onDelete={handleDeleteProfile}
-          />
-        )}
-        
-        {activeTab === 'settings' && (
-          <SettingsPanel 
-            settings={settings} 
-            gpuInfo={gpuInfo}
-            backgroundStatus={backgroundStatus}
-            profiles={profiles}
-            selectedProfileId={settingsProfileId}
-            onProfileIdChange={setSettingsProfileId}
-            onSave={handleSaveSettings}
-            onSaveProfile={handleSaveProfile}
-            refreshBackground={(folder, profileId) => refreshBackgroundVideos(folder, profileId)}
-            onGpuUpdate={setGpuInfo}
-          />
-        )}
-        
-        {activeTab === 'integrations' && (
-          <IntegrationsPanel 
-            settings={settings}
-            onSave={handleSaveSettings}
-            onCheckUpdate={(info) => {
-              setUpdateInfo(info);
-              setShowUpdateModal(true);
-            }}
-          />
-        )}
-      </main>
+        {/* Indicadores de Estado Globales */}
+        <div className="flex items-center gap-3">
+          {/* Badge de Job Activo en Header si existe */}
+          {activeJob && (
+            <div 
+              onClick={() => setActiveTab('dashboard')}
+              className="flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-full text-[10.5px] font-black text-emerald-400 cursor-pointer hover:bg-emerald-500/25 transition-all animate-pulse"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-400" />
+              <span>Vídeo {activeJob.currentVideoIndex} de {activeJob.totalCount} ({activeJob.progress}%)</span>
+            </div>
+          )}
 
-      {/* Floating Progress Dock en la parte inferior cuando el usuario cambia de pestaña */}
+          {/* Badge de GPU */}
+          <div className="hidden md:flex items-center gap-2 bg-black/40 border border-white/5 px-3 py-1 rounded-full text-[10.5px] font-bold text-gray-300">
+            <Cpu className="w-3.5 h-3.5 text-brand-primary" />
+            <span className="truncate max-w-[160px]">{gpuInfo?.gpuName || 'GPU Hardware'}</span>
+          </div>
+
+          {/* Botón de Actualizaciones */}
+          <button
+            type="button"
+            onClick={() => setActiveTab('integrations')}
+            className="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-white/5 active:scale-95"
+            title="Integraciones y Actualizaciones"
+          >
+            <Bell className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </header>
+
+      {/* 2. Cuerpo Principal (Sidebar + Workspace Scrollable) */}
+      <div className="flex-1 flex overflow-hidden min-h-0 relative">
+        {/* Sidebar */}
+        <Sidebar 
+          activeTab={activeTab} 
+          setActiveTab={setActiveTab} 
+          gpuInfo={gpuInfo}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+        />
+
+        {/* Área de Trabajo Principal (Nunca se corta horizontalmente) */}
+        <main className="flex-1 h-full overflow-y-auto min-w-0 p-6 custom-scrollbar pb-24">
+          {activeTab === 'dashboard' && (
+            <Dashboard 
+              profiles={profiles} 
+              templates={templates} 
+              settings={settings}
+              backgroundStatus={backgroundStatus}
+              refreshBackground={() => refreshBackgroundVideos()}
+              activeJob={activeJob}
+              logs={jobLogs}
+              jobError={jobError}
+              jobSuccess={jobSuccess}
+              onClearJobError={() => setJobError('')}
+              onClearJobSuccess={() => setJobSuccess('')}
+              onLogsInit={(initLogs) => setJobLogs(initLogs)}
+            />
+          )}
+          
+          {activeTab === 'presets' && (
+            <PresetsHub 
+              templates={templates} 
+              profiles={profiles}
+              settings={settings}
+              backgroundStatus={backgroundStatus}
+              onLaunchExpress={handleLaunchExpress}
+              launchError={expressLaunchError}
+              onClearLaunchError={() => setExpressLaunchError('')}
+            />
+          )}
+          
+          {activeTab === 'templates' && (
+            <TemplateEditor 
+              templates={templates} 
+              profiles={profiles}
+              onSave={handleSaveTemplate}
+              onDelete={handleDeleteTemplate}
+              onImport={handleImportTemplatePackage}
+            />
+          )}
+          
+          {activeTab === 'profiles' && (
+            <ProfilesEditor 
+              profiles={profiles} 
+              onSave={handleSaveProfile}
+              onDelete={handleDeleteProfile}
+            />
+          )}
+          
+          {activeTab === 'settings' && (
+            <SettingsPanel 
+              settings={settings} 
+              gpuInfo={gpuInfo}
+              backgroundStatus={backgroundStatus}
+              profiles={profiles}
+              selectedProfileId={settingsProfileId}
+              onProfileIdChange={setSettingsProfileId}
+              onSave={handleSaveSettings}
+              onSaveProfile={handleSaveProfile}
+              refreshBackground={(folder, profileId) => refreshBackgroundVideos(folder, profileId)}
+              onGpuUpdate={setGpuInfo}
+            />
+          )}
+          
+          {activeTab === 'integrations' && (
+            <IntegrationsPanel 
+              settings={settings}
+              onSave={handleSaveSettings}
+              onCheckUpdate={(info) => {
+                setUpdateInfo(info);
+                setShowUpdateModal(true);
+              }}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* 3. Floating Progress Dock (Dynamic Island en la parte inferior si estás en otra pestaña) */}
       {activeJob && activeTab !== 'dashboard' && (
         <FloatingProgressDock
           activeJob={activeJob}
@@ -489,7 +522,7 @@ export default function App() {
         />
       )}
 
-      {/* Modal Emergente de Actualizaciones */}
+      {/* 4. Modal Emergente de Actualizaciones */}
       {showUpdateModal && updateInfo && updateInfo.hasUpdate && (
         <UpdateModal
           updateInfo={updateInfo}

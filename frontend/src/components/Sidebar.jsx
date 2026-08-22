@@ -1,33 +1,65 @@
 import React from 'react';
-import { LayoutDashboard, Palette, KeyRound, Settings, Film, Cpu, HardDrive, Sparkles, Bell, RefreshCw } from 'lucide-react';
+import { 
+  LayoutDashboard, 
+  Palette, 
+  KeyRound, 
+  Settings, 
+  Sparkles, 
+  Bell, 
+  Cpu, 
+  ChevronLeft, 
+  ChevronRight,
+  Video,
+  Zap
+} from 'lucide-react';
 
-export default function Sidebar({ activeTab, setActiveTab, gpuInfo }) {
+export default function Sidebar({ activeTab, setActiveTab, gpuInfo, isCollapsed, onToggleCollapse }) {
   const menuItems = [
-    { id: 'dashboard', label: 'Panel de Control', icon: LayoutDashboard },
-    { id: 'presets', label: 'Plantillas Guardadas', icon: Sparkles },
-    { id: 'templates', label: 'Plantillas de Video', icon: Palette },
-    { id: 'profiles', label: 'Perfiles de IA', icon: KeyRound },
-    { id: 'settings', label: 'Ajustes de Ruta', icon: Settings },
-    { id: 'integrations', label: 'Integraciones', icon: Bell }
+    { id: 'dashboard', label: 'Panel de Control', icon: LayoutDashboard, badge: null },
+    { id: 'presets', label: 'Generación Rápida', icon: Sparkles, badge: 'PRO' },
+    { id: 'templates', label: 'Plantillas de Video', icon: Palette, badge: null },
+    { id: 'profiles', label: 'Perfiles de IA', icon: KeyRound, badge: null },
+    { id: 'settings', label: 'Ajustes de Render', icon: Settings, badge: null },
+    { id: 'integrations', label: 'Integraciones', icon: Bell, badge: null }
   ];
 
   return (
-    <aside className="w-64 bg-slate-950 border-r border-slate-900 flex flex-col h-screen sticky top-0 z-50">
-      {/* Logotipo */}
-      <div className="p-6 border-b border-slate-900 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-primary to-orange-600 flex items-center justify-center text-white font-black text-lg shadow-lg shadow-brand-primary/20">
-            R
+    <aside 
+      className={`bg-[#080c14] border-r border-white/5 flex flex-col h-full shrink-0 z-40 transition-all duration-300 ease-out select-none ${
+        isCollapsed ? 'w-[72px]' : 'w-60'
+      }`}
+    >
+      {/* 1. Header / Logo del App */}
+      <div className="h-16 px-4 border-b border-white/5 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-brand-primary via-orange-500 to-amber-500 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-brand-primary/25 shrink-0">
+            <Zap className="w-5 h-5 fill-current" />
           </div>
-          <div>
-            <h1 className="font-black text-sm text-white tracking-wider leading-none uppercase">Redit Gen</h1>
-            <span className="text-[9px] text-slate-500 font-bold tracking-widest block mt-1 uppercase">V2 Automation</span>
-          </div>
+          {!isCollapsed && (
+            <div className="min-w-0 animate-fadeIn">
+              <h1 className="font-black text-xs text-white tracking-widest leading-none uppercase truncate">
+                REDDIT STUDIO
+              </h1>
+              <span className="text-[8.5px] text-gray-400 font-bold tracking-widest block mt-1 uppercase">
+                Desktop Suite v2.0
+              </span>
+            </div>
+          )}
         </div>
+
+        {/* Botón de Colapso */}
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          title={isCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+          className="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white flex items-center justify-center transition-all cursor-pointer shrink-0 border border-white/5 active:scale-95"
+        >
+          {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+        </button>
       </div>
 
-      {/* Menú de Navegación */}
-      <nav className="flex-1 p-4 space-y-1.5">
+      {/* 2. Menú de Navegación */}
+      <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto custom-scrollbar">
         {menuItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeTab === item.id;
@@ -35,39 +67,73 @@ export default function Sidebar({ activeTab, setActiveTab, gpuInfo }) {
             <button
               key={item.id}
               onClick={() => setActiveTab(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 cursor-pointer ${
+              title={isCollapsed ? item.label : ''}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl text-xs font-bold transition-all duration-150 cursor-pointer relative group ${
                 isActive
-                  ? 'bg-gradient-to-r from-brand-primary to-orange-600 text-white shadow-md shadow-brand-primary/15'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              }`}
+                  ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/20'
+                  : 'text-gray-400 hover:text-white hover:bg-white/5'
+              } ${isCollapsed ? 'justify-center px-0' : ''}`}
             >
-              <Icon className="w-4 h-4" />
-              {item.label}
+              {/* Indicador de barra izquierda activa */}
+              {isActive && (
+                <span className="absolute -left-1 top-2 bottom-2 w-1.5 rounded-r-full bg-white shadow-sm" />
+              )}
+
+              <Icon className={`w-4.5 h-4.5 shrink-0 transition-transform group-hover:scale-110 ${
+                isActive ? 'text-white' : 'text-gray-400 group-hover:text-white'
+              }`} />
+
+              {!isCollapsed && (
+                <span className="truncate flex-1 text-left tracking-wide font-extrabold text-[11.5px]">
+                  {item.label}
+                </span>
+              )}
+
+              {!isCollapsed && item.badge && (
+                <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded-md border shrink-0 ${
+                  isActive 
+                    ? 'bg-white/20 text-white border-white/30' 
+                    : 'bg-brand-primary/15 text-brand-primary border-brand-primary/30'
+                }`}>
+                  {item.badge}
+                </span>
+              )}
             </button>
           );
         })}
       </nav>
 
-      {/* Estado del Hardware */}
-      <div className="p-4 border-t border-slate-900 bg-slate-950">
-        <div className="rounded-xl bg-slate-900/60 p-3.5 border border-slate-900 flex flex-col gap-2.5">
-          <div className="flex items-center gap-1.5 text-[9px] font-black text-slate-500 uppercase tracking-widest">
-            <Cpu className="w-3.5 h-3.5 text-brand-primary" />
-            <span>Motor de Render</span>
+      {/* 3. Footer con Tarjeta de GPU / Hardware */}
+      <div className="p-3 border-t border-white/5 shrink-0">
+        {isCollapsed ? (
+          <div 
+            title={`Motor de Render: ${gpuInfo?.gpuName || 'GPU Hardware'}`}
+            className="w-10 h-10 mx-auto rounded-2xl bg-white/5 border border-white/5 flex items-center justify-center text-brand-primary cursor-help"
+          >
+            <Cpu className="w-5 h-5" />
           </div>
-          <div className="text-white font-extrabold text-[10.5px] truncate leading-tight">
-            {gpuInfo?.gpuName || 'Buscando gráfica...'}
+        ) : (
+          <div className="rounded-2xl bg-[#0c101a] p-3 border border-white/5 space-y-2 animate-fadeIn shadow-md">
+            <div className="flex items-center justify-between">
+              <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Cpu className="w-3 h-3 text-brand-primary" />
+                <span>GPU HARDWARE</span>
+              </span>
+              <span className={`w-2 h-2 rounded-full ${gpuInfo?.codec !== 'libx264' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+            </div>
+
+            <div className="text-white font-black text-[11px] truncate" title={gpuInfo?.gpuName}>
+              {gpuInfo?.gpuName || 'Detectando GPU...'}
+            </div>
+
+            <div className="flex items-center justify-between text-[9px] font-bold text-gray-400 pt-0.5">
+              <span>Códec:</span>
+              <span className="text-emerald-400 font-mono font-black uppercase">
+                {gpuInfo?.codec || 'AUTO'}
+              </span>
+            </div>
           </div>
-          
-          <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[9px] font-bold w-fit ${
-            gpuInfo?.codec !== 'libx264'
-              ? 'bg-emerald-500/5 text-emerald-400 border border-emerald-500/10'
-              : 'bg-amber-500/5 text-amber-400 border border-amber-500/10'
-          }`}>
-            <span className={`w-1.5 h-1.5 rounded-full ${gpuInfo?.codec !== 'libx264' ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`}></span>
-            <span>{gpuInfo?.codec !== 'libx264' ? 'ACELERACIÓN GPU' : 'CPU FALLBACK'}</span>
-          </div>
-        </div>
+        )}
       </div>
     </aside>
   );
