@@ -17,10 +17,7 @@ import {
   Zap,
   Sliders,
   ChevronRight,
-  Flame,
-  Ghost,
   HelpCircle,
-  Briefcase,
   ClipboardList,
   FileText
 } from 'lucide-react';
@@ -33,14 +30,6 @@ const formatTime = (seconds) => {
   const s = seconds % 60;
   return `${m}:${s < 10 ? '0' : ''}${s} min`;
 };
-
-// Ideas de ejemplo rápidas para un clic
-const QUICK_INSPIRATION_TOPICS = [
-  { label: '🔥 Historia Viral', prompt: 'Una historia impactante de Reddit sobre un secreto familiar revelado en una cena navideña.' },
-  { label: '👻 Terror Urbano', prompt: 'Una experiencia paranormal aterradora ocurrida en una carretera solitaria a medianoche.' },
-  { label: '💼 Venganza Laboral', prompt: 'Un empleado que descubrió un fraude en su empresa y ejecutó una venganza legal perfecta.' },
-  { label: '🕵️ Misterio Real', prompt: 'Un suceso inexplicable en un pueblo pequeño que la policía nunca pudo resolver.' },
-];
 
 export default function Dashboard({ 
   profiles, templates, settings, backgroundStatus, refreshBackground,
@@ -574,23 +563,6 @@ export default function Dashboard({
                   </div>
                 )}
               </div>
-
-              {/* Chips de Inspiración Rápida */}
-              {!profileChain && seedInputMode === 'individual' && count === 1 && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
-                  {QUICK_INSPIRATION_TOPICS.map((chip, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSeedChange(0, chip.prompt)}
-                      disabled={!!activeJob}
-                      className="text-[9.5px] font-bold bg-white/5 hover:bg-brand-primary/20 hover:text-brand-primary hover:border-brand-primary/30 border border-white/5 text-gray-300 px-2.5 py-1 rounded-xl whitespace-nowrap transition-all cursor-pointer active:scale-95 shrink-0"
-                    >
-                      {chip.label}
-                    </button>
-                  ))}
-                </div>
-              )}
 
               {/* Input Area según Modo */}
               {profileChain ? (
