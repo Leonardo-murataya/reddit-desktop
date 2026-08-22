@@ -16,7 +16,7 @@ import {
 export default function Sidebar({ activeTab, setActiveTab, gpuInfo, isCollapsed, onToggleCollapse }) {
   const menuItems = [
     { id: 'dashboard', label: 'Panel de Control', icon: LayoutDashboard, badge: null },
-    { id: 'presets', label: 'Generación Rápida', icon: Sparkles, badge: 'PRO' },
+    { id: 'presets', label: 'Generación Rápida', icon: Sparkles, badge: null },
     { id: 'templates', label: 'Plantillas de Video', icon: Palette, badge: null },
     { id: 'profiles', label: 'Perfiles de IA', icon: KeyRound, badge: null },
     { id: 'settings', label: 'Ajustes de Render', icon: Settings, badge: null },

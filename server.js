@@ -493,9 +493,9 @@ app.post('/api/updater/check', async (req, res) => {
     const currentDb = db.readDb();
     const settings = currentDb.settings || {};
     
-    // Obtener repositorio y token (desde body o guardados en settings)
-    const repo = (req.body.githubRepo || settings.githubRepo || 'Leonardo-murataya/reddit-generador').trim();
-    const token = (req.body.githubToken !== undefined ? req.body.githubToken : (settings.githubToken || process.env.GITHUB_TOKEN || '')).trim();
+    // Obtener repositorio y token (por defecto el repositorio oficial interno)
+    const repo = (req.body?.githubRepo || settings.githubRepo || 'Leonardo-murataya/reddit-desktop').trim();
+    const token = (req.body?.githubToken !== undefined ? req.body.githubToken : (settings.githubToken || process.env.GITHUB_TOKEN || '')).trim();
     const currentVersion = require('./package.json').version || '1.0.0';
 
     if (!repo) {

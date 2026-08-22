@@ -20,7 +20,9 @@ import {
   Flame,
   Ghost,
   HelpCircle,
-  Briefcase
+  Briefcase,
+  ClipboardList,
+  FileText
 } from 'lucide-react';
 import ProfileChainModal from './ProfileChainModal';
 import GenerationLogsConsole from './GenerationLogsConsole';
@@ -514,15 +516,31 @@ export default function Dashboard({
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setIsChainModalOpen(true)}
-                    disabled={!!activeJob}
-                    className="w-full bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 border border-white/10 text-gray-300 hover:text-white font-extrabold py-2 rounded-xl text-[11px] transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-95"
-                  >
-                    <Link className="w-3.5 h-3.5 text-brand-primary" />
-                    <span>Configurar Cadena Automática de Perfiles</span>
-                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleSwitchInputMode(seedInputMode === 'bulk' ? 'individual' : 'bulk')}
+                      disabled={!!activeJob || !!profileChain}
+                      className={`w-full py-2 rounded-xl text-[11px] font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border ${
+                        seedInputMode === 'bulk'
+                          ? 'bg-brand-primary text-white border-brand-primary shadow-md shadow-brand-primary/20'
+                          : 'bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 text-gray-300 hover:text-white border-white/10'
+                      }`}
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      <span>{seedInputMode === 'bulk' ? '✓ Pegado Masivo' : '📋 Pegado Masivo'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsChainModalOpen(true)}
+                      disabled={!!activeJob}
+                      className="w-full bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 border border-white/10 text-gray-300 hover:text-white font-extrabold py-2 rounded-xl text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                    >
+                      <Link className="w-3.5 h-3.5 text-brand-primary" />
+                      <span>Cadena Perfiles</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -533,13 +551,13 @@ export default function Dashboard({
                 <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
                   2. Idea del Video o Tema
                 </label>
-                {count > 1 && !profileChain && (
+                {!profileChain && (
                   <div className="flex bg-black/50 rounded-xl p-0.5 border border-white/10">
                     <button
                       type="button"
                       onClick={() => handleSwitchInputMode('individual')}
                       className={`px-2.5 py-0.5 text-[9.5px] font-black uppercase rounded-lg transition-all cursor-pointer ${
-                        seedInputMode === 'individual' ? 'bg-brand-primary text-white' : 'text-gray-400 hover:text-white'
+                        seedInputMode === 'individual' ? 'bg-brand-primary text-white shadow-sm' : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       Individual
@@ -548,7 +566,7 @@ export default function Dashboard({
                       type="button"
                       onClick={() => handleSwitchInputMode('bulk')}
                       className={`px-2.5 py-0.5 text-[9.5px] font-black uppercase rounded-lg transition-all cursor-pointer ${
-                        seedInputMode === 'bulk' ? 'bg-brand-primary text-white' : 'text-gray-400 hover:text-white'
+                        seedInputMode === 'bulk' ? 'bg-brand-primary text-white shadow-sm' : 'text-gray-400 hover:text-white'
                       }`}
                     >
                       Pegado Masivo
@@ -558,7 +576,7 @@ export default function Dashboard({
               </div>
 
               {/* Chips de Inspiración Rápida */}
-              {!profileChain && count === 1 && (
+              {!profileChain && seedInputMode === 'individual' && count === 1 && (
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1 custom-scrollbar">
                   {QUICK_INSPIRATION_TOPICS.map((chip, idx) => (
                     <button
