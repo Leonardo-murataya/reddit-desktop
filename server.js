@@ -488,14 +488,16 @@ app.post('/api/notifications/test', async (req, res) => {
 });
 
 // Endpoint para verificar actualizaciones de GitHub (Soporta repos públicos y privados con Token de solo lectura)
-app.post('/api/updater/check', async (req, res) => {
+const handleCheckUpdates = async (req, res) => {
   try {
     const currentDb = db.readDb();
     const settings = currentDb.settings || {};
     
     // Obtener repositorio y token (por defecto el repositorio oficial interno)
     const repo = (req.body?.githubRepo || settings.githubRepo || 'Leonardo-murataya/reddit-desktop').trim();
-    const token = (req.body?.githubToken !== undefined ? req.body.githubToken : (settings.githubToken || process.env.GITHUB_TOKEN || '')).trim();
+    const token = (req.body?.githubToken !== undefined && req.body.githubToken !== '' 
+      ? req.body.githubToken 
+      : (settings.githubToken || process.env.GITHUB_TOKEN || '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')).trim();
     const currentVersion = require('./package.json').version || '1.0.0';
 
     if (!repo) {
@@ -577,7 +579,11 @@ app.post('/api/updater/check', async (req, res) => {
     console.error('Error al verificar actualizaciones:', error.message);
     res.status(500).json({ error: error.message, currentVersion: require('./package.json').version });
   }
-});
+};
+
+app.post('/api/updater/check', handleCheckUpdates);
+app.get('/api/updates/check', handleCheckUpdates);
+app.post('/api/updates/check', handleCheckUpdates);
 
 
 // 3. Perfiles de API de IA
