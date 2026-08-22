@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/* ----------------------------------------------------
+   DESIGN SYSTEM - EMIL KOWALSKI CRAFT & DELIGHT
+   ---------------------------------------------------- */
+@theme {
+  --color-brand-primary: #ff4500;
+  --color-brand-primary-hover: #ff5722;
+  --color-bg-dark: #0a0d14;
+  --color-panel-dark: #121824;
+  --color-border-dark: #1e293b;
+}
+
+:root {
+  color-scheme: dark;
+  background-color: #0a0d14;
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  /* Easing curves (Emil Kowalski Philosophy) */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: hidden;
+  color: #f8fafc;
+  background-color: #0a0d14;
+}
+
+/* Button & interactive click micro-interaction (Emil Kowalski) */
+button:not(:disabled):active {
+  transform: scale(0.97);
+  transition: transform 100ms var(--ease-out);
+}
+
+/* Premium Scrollbars */
+::-webkit-scrollbar,
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track,
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(10, 13, 20, 0.6);
+}
+
+::-webkit-scrollbar-thumb,
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 99px;
+}
+
+::-webkit-scrollbar-thumb:hover,
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #ff4500;
+}
+
+/* Modern Input & Select Styling */
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+  background-color: rgba(15, 23, 42, 0.6);
+  border: 1px solid #1e293b;
+  transition: border-color 150ms var(--ease-out), box-shadow 150ms var(--ease-out), background-color 150ms var(--ease-out);
+}
+
+input[type="text"]:focus,
+input[type="number"]:focus,
+textarea:focus,
+select:focus {
+  border-color: #ff4500;
+  box-shadow: 0 0 0 2px rgba(255, 69, 0, 0.15);
+  background-color: rgba(15, 23, 42, 0.85);
+  outline: none;
+}
+
+/* Clean Custom range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: #1e293b;
+  border-radius: 99px;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ff4500;
+  cursor: pointer;
+  transition: transform 100ms var(--ease-out);
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+/* Custom premium container panels */
+.glass-panel {
+  background-color: #121824;
+  border: 1px solid #1e293b;
+  box-shadow: 0 4px 24px -2px rgba(0, 0, 0, 0.35);
+  transition: border-color 200ms var(--ease-out), box-shadow 200ms var(--ease-out);
+}
+
+/* Segmented Buttons Control */
+.segmented-btn {
+  background-color: rgba(15, 23, 42, 0.4);
+  border: 1px solid #1e293b;
+  color: #94a3b8;
+  transition: all 150ms var(--ease-out);
+}
+
+.segmented-btn:hover {
+  color: #ffffff;
+  background-color: rgba(30, 41, 59, 0.5);
+}
+
+.segmented-btn.active {
+  background-color: #ff4500;
+  color: #ffffff;
+  border-color: #ff4500;
+  box-shadow: 0 2px 10px rgba(255, 69, 0, 0.3);
+}
+
+/* Animations following Emil Kowalski guidelines */
+.animate-fadeIn {
+  animation: uiFadeIn 200ms var(--ease-out) forwards;
+}
+
+@keyframes uiFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-popIn {
+  animation: popIn 220ms var(--ease-out) forwards;
+}
+
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-slideUp {
+  animation: slideUp 280ms var(--ease-out) forwards;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 20px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes progress-bar-stripes {
+  from {
+    background-position: 1rem 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}

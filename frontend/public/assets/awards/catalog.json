@@ -1,0 +1,555 @@
+[
+  {
+    "id": "BeMineValentine_512",
+    "name": "BeMineValentine 512",
+    "file": "BeMineValentine_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "Beating_Heart_512",
+    "name": "Beating Heart 512",
+    "file": "Beating_Heart_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "HeartMedal_512",
+    "name": "HeartMedal 512",
+    "file": "HeartMedal_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "I_shy_512",
+    "name": "I shy 512",
+    "file": "I_shy_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "Levelup_512",
+    "name": "Levelup 512",
+    "file": "Levelup_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "Rocket_512",
+    "name": "Rocket 512",
+    "file": "Rocket_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "Woah_dude_512",
+    "name": "Woah dude 512",
+    "file": "Woah_dude_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "a_kiss_512",
+    "name": "a kiss 512",
+    "file": "a_kiss_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "b_512",
+    "name": "b 512",
+    "file": "b_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "break_512",
+    "name": "break 512",
+    "file": "break_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "what_512",
+    "name": "what 512",
+    "file": "what_512.gif",
+    "isAnimated": true,
+    "category": "animadas"
+  },
+  {
+    "id": "Mithril",
+    "name": "Mithril",
+    "file": "Mithril.gif",
+    "isAnimated": true,
+    "category": "medallas"
+  },
+  {
+    "id": "Trinity",
+    "name": "Trinity",
+    "file": "Trinity.gif",
+    "isAnimated": true,
+    "category": "medallas"
+  },
+  {
+    "id": "gold",
+    "name": "gold",
+    "file": "gold.png",
+    "isAnimated": false,
+    "category": "medallas"
+  },
+  {
+    "id": "platinum",
+    "name": "platinum",
+    "file": "platinum.png",
+    "isAnimated": false,
+    "category": "medallas"
+  },
+  {
+    "id": "silver",
+    "name": "silver",
+    "file": "silver.png",
+    "isAnimated": false,
+    "category": "medallas"
+  },
+  {
+    "id": "WholesomeSuperpro",
+    "name": "WholesomeSuperpro",
+    "file": "WholesomeSuperpro.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "HeartEyes",
+    "name": "HeartEyes",
+    "file": "HeartEyes.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "MURICA",
+    "name": "MURICA",
+    "file": "MURICA.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "ImDeceased",
+    "name": "ImDeceased",
+    "file": "ImDeceased.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "oldrocketlike",
+    "name": "oldrocketlike",
+    "file": "oldrocketlike.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "EvilCackle",
+    "name": "EvilCackle",
+    "file": "EvilCackle.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "IllDrinktoThat",
+    "name": "IllDrinktoThat",
+    "file": "IllDrinktoThat.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "olddisappoint",
+    "name": "olddisappoint",
+    "file": "olddisappoint.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Wholesome",
+    "name": "Wholesome",
+    "file": "Wholesome.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Ally",
+    "name": "Ally",
+    "file": "Ally.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "PlusOne",
+    "name": "PlusOne",
+    "file": "PlusOne.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "AwesomeAnswer",
+    "name": "AwesomeAnswer",
+    "file": "AwesomeAnswer.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Updoot",
+    "name": "Updoot",
+    "file": "Updoot.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "NarwhalSalute",
+    "name": "NarwhalSalute",
+    "file": "NarwhalSalute.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Thanks",
+    "name": "Thanks",
+    "file": "Thanks.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "oldwearing",
+    "name": "oldwearing",
+    "file": "oldwearing.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "GottheW",
+    "name": "GottheW",
+    "file": "GottheW.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Animated_Cake_512",
+    "name": "Animated Cake 512",
+    "file": "Animated_Cake_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Animated_Helpful_512",
+    "name": "Animated Helpful 512",
+    "file": "Animated_Helpful_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "CrabRave_512",
+    "name": "CrabRave 512",
+    "file": "CrabRave_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Giggle_512",
+    "name": "Giggle 512",
+    "file": "Giggle_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Illuminati_512",
+    "name": "Illuminati 512",
+    "file": "Illuminati_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "SnooClappingPremium_512",
+    "name": "SnooClappingPremium 512",
+    "file": "SnooClappingPremium_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "SnooClapping_512",
+    "name": "SnooClapping 512",
+    "file": "SnooClapping_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Spits_drink_512",
+    "name": "Spits drink 512",
+    "file": "Spits_drink_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Superheart_512",
+    "name": "Superheart 512",
+    "file": "Superheart_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "TableSlap_512",
+    "name": "TableSlap 512",
+    "file": "TableSlap_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "TakeMyPower_512",
+    "name": "TakeMyPower 512",
+    "file": "TakeMyPower_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "TeleportIn_512",
+    "name": "TeleportIn 512",
+    "file": "TeleportIn_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "TeleportOut_512",
+    "name": "TeleportOut 512",
+    "file": "TeleportOut_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Timeless_512",
+    "name": "Timeless 512",
+    "file": "Timeless_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Train_silver_512",
+    "name": "Train silver 512",
+    "file": "Train_silver_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Updoot_512",
+    "name": "Updoot 512",
+    "file": "Updoot_512.gif",
+    "isAnimated": true,
+    "category": "reacciones"
+  },
+  {
+    "id": "Yummy",
+    "name": "Yummy",
+    "file": "Yummy.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Original",
+    "name": "Original",
+    "file": "Original.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "WholesomeSealofApproval",
+    "name": "WholesomeSealofApproval",
+    "file": "WholesomeSealofApproval.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "TodayILearned",
+    "name": "TodayILearned",
+    "file": "TodayILearned.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Facepalm",
+    "name": "Facepalm",
+    "file": "Facepalm.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Shocked",
+    "name": "Shocked",
+    "file": "Shocked.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "TreeHug",
+    "name": "TreeHug",
+    "file": "TreeHug.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "KeepCalm",
+    "name": "KeepCalm",
+    "file": "KeepCalm.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "MadeMeSmile",
+    "name": "MadeMeSmile",
+    "file": "MadeMeSmile.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "LawyerUp",
+    "name": "LawyerUp",
+    "file": "LawyerUp.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "LOVE",
+    "name": "LOVE",
+    "file": "LOVE.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Looking",
+    "name": "Looking",
+    "file": "Looking.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Helpful",
+    "name": "Helpful",
+    "file": "Helpful.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "YasQueen",
+    "name": "YasQueen",
+    "file": "YasQueen.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "TearingUp",
+    "name": "TearingUp",
+    "file": "TearingUp.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "ItsCute",
+    "name": "ItsCute",
+    "file": "ItsCute.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Dread",
+    "name": "Dread",
+    "file": "Dread.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "oldtakemyenergy",
+    "name": "oldtakemyenergy",
+    "file": "oldtakemyenergy.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Snek",
+    "name": "Snek",
+    "file": "Snek.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "StonksFalling",
+    "name": "StonksFalling",
+    "file": "StonksFalling.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "StonksRising",
+    "name": "StonksRising",
+    "file": "StonksRising.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "PressF",
+    "name": "PressF",
+    "file": "PressF.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "BlessUp",
+    "name": "BlessUp",
+    "file": "BlessUp.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "Heartwarming",
+    "name": "Heartwarming",
+    "file": "Heartwarming.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "This",
+    "name": "This",
+    "file": "This.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "MindBlown",
+    "name": "MindBlown",
+    "file": "MindBlown.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "PotoCoins",
+    "name": "PotoCoins",
+    "file": "PotoCoins.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "GOAT",
+    "name": "GOAT",
+    "file": "GOAT.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "BlessUp",
+    "name": "BlessUp",
+    "file": "BlessUp.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  },
+  {
+    "id": "BuffDoge",
+    "name": "BuffDoge",
+    "file": "BuffDoge.png",
+    "isAnimated": false,
+    "category": "reacciones"
+  }
+]
