@@ -261,17 +261,29 @@ export default function Dashboard({
 
   useEffect(() => {
     if (profiles.length > 0 && !selectedProfile) {
-      const defaultProf = profiles.find(p => p.id === settings.defaultProfileId) || profiles[0];
-      setSelectedProfile(defaultProf.id);
+      const defaultProf = profiles.find(p => p.id === settings?.defaultProfileId) || profiles[0];
+      if (defaultProf) setSelectedProfile(defaultProf.id);
     }
-  }, [profiles, settings]);
+  }, [profiles, settings, selectedProfile]);
 
   useEffect(() => {
     if (templates.length > 0 && !selectedTemplate) {
-      const defaultTemp = templates.find(t => t.id === settings.defaultTemplateId) || templates[0];
-      setSelectedTemplate(defaultTemp.id);
+      const defaultTemp = templates.find(t => t.id === settings?.defaultTemplateId) || templates[0];
+      if (defaultTemp) setSelectedTemplate(defaultTemp.id);
     }
-  }, [templates, settings]);
+  }, [templates, settings, selectedTemplate]);
+
+  useEffect(() => {
+    if (templates.length > 0 && seeds.length === 0) {
+      const defaultTemp = templates.find(t => t.id === selectedTemplate) || templates.find(t => t.id === settings?.defaultTemplateId) || templates[0];
+      const defaultProf = profiles.find(p => p.id === (defaultTemp?.profileId || selectedProfile || settings?.defaultProfileId)) || profiles[0];
+      setSeeds([{
+        prompt: '',
+        templateId: defaultTemp?.id || '',
+        profileId: defaultProf?.id || ''
+      }]);
+    }
+  }, [templates, profiles, selectedTemplate, selectedProfile, seeds.length, settings]);
 
   useEffect(() => {
     if (selectedTemplate && templates.length > 0) {
@@ -286,7 +298,7 @@ export default function Dashboard({
     if (selectedProfile && profiles.length > 0) {
       const activeProfile = profiles.find(p => p.id === selectedProfile);
       if (activeProfile) {
-        const folder = activeProfile.backgroundFolder || settings.backgroundFolder || '';
+        const folder = activeProfile.backgroundFolder || settings?.backgroundFolder || '';
         refreshBackground(folder, activeProfile.id);
       }
     }
@@ -296,6 +308,9 @@ export default function Dashboard({
     e.preventDefault();
     setSubmitError('');
     setIsSubmitting(true);
+
+    const defaultTemp = templates.find(t => t.id === selectedTemplate) || templates.find(t => t.id === settings?.defaultTemplateId) || templates[0];
+    const defaultProf = profiles.find(p => p.id === (selectedProfile || defaultTemp?.profileId || settings?.defaultProfileId)) || profiles[0];
 
     let activeSeeds = [];
     let hasEmpty = false;
@@ -308,16 +323,17 @@ export default function Dashboard({
           if (!prompt) hasEmpty = true;
           activeSeeds.push({
             prompt,
-            templateId: item.templateId,
-            profileId: item.profileId
+            templateId: item.templateId || defaultTemp?.id,
+            profileId: item.profileId || defaultProf?.id
           });
         }
       }
     } else {
-      activeSeeds = seeds.map(s => ({
+      const currentSeeds = seeds.length > 0 ? seeds : [{ prompt: '' }];
+      activeSeeds = currentSeeds.map(s => ({
         prompt: (s.prompt || '').trim(),
-        templateId: s.templateId || selectedTemplate,
-        profileId: s.profileId || selectedProfile
+        templateId: s.templateId || selectedTemplate || defaultTemp?.id,
+        profileId: s.profileId || selectedProfile || defaultProf?.id
       }));
       hasEmpty = activeSeeds.some(s => !s.prompt);
     }
@@ -345,9 +361,6 @@ export default function Dashboard({
       if (!res.ok) {
         throw new Error(data.error || 'Error al iniciar la generación de videos.');
       }
-
-      const defaultTemp = templates.find(t => t.id === settings.defaultTemplateId) || templates[0];
-      const defaultProf = profiles.find(p => p.id === (defaultTemp?.profileId || settings.defaultProfileId)) || profiles[0];
 
       setSeeds([{
         prompt: '',
@@ -672,32 +685,56 @@ export default function Dashboard({
 
             {/* Alertas de Error / Éxito */}
             {submitError && (
-              <div className="bg-red-500/15 border border-red-500/30 text-red-400 rounded-2xl p-3 text-xs flex items-center gap-2 animate-fadeIn">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                <span>{submitError}</span>
+              <div className="bg-red-500/15 border border-red-500/30 text-red-400 rounded-2xl p-3 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span className="break-words font-medium">{submitError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSubmitError('')}
+                  className="text-red-400 hover:text-white p-1 rounded-lg bg-white/5 hover:bg-white/10 transition-all cursor-pointer shrink-0"
+                  title="Cerrar mensaje"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
             {jobError && (
-              <div className="bg-red-500/15 border border-red-500/30 text-red-400 rounded-2xl p-3 text-xs flex items-center justify-between gap-2 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>{jobError}</span>
+              <div className="bg-red-500/15 border border-red-500/30 text-red-400 rounded-2xl p-3 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span className="break-words font-medium">{jobError}</span>
                 </div>
                 {onClearJobError && (
-                  <button onClick={onClearJobError} className="text-red-400 hover:text-white font-bold cursor-pointer">✕</button>
+                  <button
+                    type="button"
+                    onClick={onClearJobError}
+                    className="text-red-400 hover:text-white p-1 rounded-lg bg-white/5 hover:bg-white/10 transition-all cursor-pointer shrink-0"
+                    title="Cerrar mensaje"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             )}
 
             {jobSuccess && (
-              <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-2xl p-3 text-xs flex items-center justify-between gap-2 animate-fadeIn">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>{jobSuccess}</span>
+              <div className="bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-2xl p-3 text-xs flex items-center justify-between gap-3 animate-fadeIn">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span className="break-words font-medium">{jobSuccess}</span>
                 </div>
                 {onClearJobSuccess && (
-                  <button onClick={onClearJobSuccess} className="text-emerald-400 hover:text-white font-bold cursor-pointer">✕</button>
+                  <button
+                    type="button"
+                    onClick={onClearJobSuccess}
+                    className="text-emerald-400 hover:text-white p-1 rounded-lg bg-white/5 hover:bg-white/10 transition-all cursor-pointer shrink-0"
+                    title="Cerrar mensaje"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
             )}

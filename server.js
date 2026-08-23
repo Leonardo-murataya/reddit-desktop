@@ -997,7 +997,7 @@ app.get('/api/jobs/progress', (req, res) => {
 
 // 7. Endpoint principal para disparar la generación
 app.post('/api/generate', async (req, res) => {
-  const { prompt, count = 1, profileId, templateId, backgroundFolder, batch } = req.body;
+  const { prompt, count = 1, profileId, templateId, backgroundFolder, batch, seeds } = req.body;
 
   if (activeJob) {
     return res.status(400).json({ error: 'Ya hay un proceso de renderizado en curso. Por favor espera a que finalice.' });
@@ -1005,21 +1005,53 @@ app.post('/api/generate', async (req, res) => {
 
   const currentDb = db.readDb();
 
-  // Normalizar el lote: si viene un lote usarlo, si no, crear un lote de un solo elemento para mantener compatibilidad
+  if (!currentDb.templates || currentDb.templates.length === 0) {
+    return res.status(400).json({ error: 'No hay plantillas de video guardadas. Crea al menos una plantilla en el Diseñador de Plantillas.' });
+  }
+
+  // Normalizar lote: soporta formato seeds[], batch[] o unitario
   let normalizedBatch = [];
-  if (batch && Array.isArray(batch)) {
-    normalizedBatch = batch.map(item => ({
-      templateId: item.templateId,
-      count: parseInt(item.count) || 1,
-      prompt: item.prompt,
-      profileId: item.profileId
-    }));
+  if (seeds && Array.isArray(seeds) && seeds.length > 0) {
+    normalizedBatch = seeds.map(s => {
+      const targetTmpl = currentDb.templates.find(t => t.id === s.templateId) || 
+                         currentDb.templates.find(t => t.id === templateId) || 
+                         currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+                         currentDb.templates[0];
+      const tmplId = targetTmpl ? targetTmpl.id : (s.templateId || templateId);
+      const profId = s.profileId || profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+      return {
+        templateId: tmplId,
+        count: 1,
+        prompt: (s.prompt || '').trim(),
+        profileId: profId
+      };
+    });
+  } else if (batch && Array.isArray(batch)) {
+    normalizedBatch = batch.map(item => {
+      const targetTmpl = currentDb.templates.find(t => t.id === item.templateId) || 
+                         currentDb.templates.find(t => t.id === templateId) || 
+                         currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+                         currentDb.templates[0];
+      const tmplId = targetTmpl ? targetTmpl.id : (item.templateId || templateId);
+      const profId = item.profileId || profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+      return {
+        templateId: tmplId,
+        count: parseInt(item.count) || 1,
+        prompt: item.prompt,
+        profileId: profId
+      };
+    });
   } else {
+    const targetTmpl = currentDb.templates.find(t => t.id === templateId) || 
+                       currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+                       currentDb.templates[0];
+    const tmplId = targetTmpl ? targetTmpl.id : templateId;
+    const profId = profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
     normalizedBatch = [{
-      templateId: templateId,
+      templateId: tmplId,
       count: parseInt(count) || 1,
       prompt: prompt,
-      profileId: profileId
+      profileId: profId
     }];
   }
 
@@ -1028,7 +1060,7 @@ app.post('/api/generate', async (req, res) => {
   for (const item of normalizedBatch) {
     const template = currentDb.templates.find(t => t.id === item.templateId);
     if (!template) {
-      return res.status(400).json({ error: `No se encontró la plantilla con ID: ${item.templateId}` });
+      return res.status(400).json({ error: `No se encontró la plantilla de video requerida (ID: ${item.templateId || 'no especificado'}).` });
     }
 
     const finalProfileId = item.profileId || template.profileId || currentDb.settings.defaultProfileId;
