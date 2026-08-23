@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Save, Plus, Trash2, Palette, Volume2, Type, Move, Upload, Eye, Zap, Play, RotateCcw, VolumeX, Sparkles, Download, Shield, Music, AlertTriangle, FolderOpen, Users, Info } from 'lucide-react';
 import AwardPickerModal from './AwardPickerModal';
+import { useUIModal } from '../context/UIModalContext';
 
 const EDGE_VOICES = [
   { value: 'es-MX-JorgeNeural', label: 'Español (México) - Jorge (Masculino, Natural)' },
@@ -103,6 +104,7 @@ const percentValueToRateStr = (val) => {
 };
 
 export default function TemplateEditor({ templates, profiles = [], onSave, onDelete, onImport }) {
+  const { showToast, showAlert, showConfirm } = useUIModal();
   const [selectedId, setSelectedId] = useState('');
   
   // Pestaña activa del editor para organizar y no abrumar al usuario
@@ -188,8 +190,9 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
           if (data.success) {
             setAvailableFonts(data.fonts);
             setFont(data.fontName);
+            showToast(`Fuente "${data.fontName}" cargada exitosamente.`, 'success');
           } else {
-            alert('Error al subir fuente: ' + (data.error || 'Desconocido'));
+            showAlert(data.error || 'No se pudo procesar el archivo de fuente seleccionado.', 'Error al Subir Fuente', 'error');
           }
         })
         .catch(err => console.error('Error al subir fuente:', err));
@@ -553,15 +556,20 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   };
 
   const handleDeleteSubmit = async () => {
-    if (confirm('¿Estás seguro de que deseas eliminar esta plantilla?')) {
+    const ok = await showConfirm(
+      '¿Estás seguro de que deseas eliminar permanentemente esta plantilla de video?',
+      'Eliminar Plantilla',
+      { confirmText: 'Eliminar', cancelText: 'Cancelar', type: 'danger' }
+    );
+    if (ok) {
       await onDelete(selectedId);
-      const remaining = templates.filter(t => t.id !== selectedId);
+      const remaining = (templates || []).filter(t => t.id !== selectedId);
       if (remaining.length > 0) {
         setSelectedId(remaining[0].id);
       } else {
         setSelectedId('new');
       }
-      alert('Plantilla eliminada exitosamente.');
+      showToast('Plantilla eliminada exitosamente.', 'success');
     }
   };
 
@@ -569,7 +577,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     try {
       const template = templates.find(t => t.id === selectedId);
       if (!template) {
-        alert('No se pudo encontrar la plantilla seleccionada para exportar.');
+        showAlert('No se pudo encontrar la plantilla seleccionada para exportar.', 'Error al Exportar', 'warning');
         return;
       }
       
@@ -600,13 +608,13 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       downloadAnchor.remove();
       
       if (includeApiKeyInExport) {
-        alert('⚠️ Plantilla exportada exitosamente CON la clave de API incluida (bajo tu propio riesgo). Recuerda no compartir este archivo públicamente.');
+        showAlert('⚠️ Plantilla exportada exitosamente CON la clave de API incluida (bajo tu propio riesgo). Recuerda no compartir este archivo con personas no autorizadas.', 'Plantilla Exportada', 'warning');
       } else {
-        alert('Plantilla exportada exitosamente (el perfil de IA se incluyó sin la clave de API por seguridad).');
+        showToast('Plantilla exportada exitosamente (clave de API protegida).', 'success');
       }
     } catch (err) {
       console.error(err);
-      alert('Error al exportar plantilla: ' + err.message);
+      showAlert('Error al exportar plantilla: ' + err.message, 'Error al Exportar', 'error');
     }
   };
 
@@ -619,27 +627,33 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       try {
         const parsed = JSON.parse(event.target.result);
         if (!parsed || parsed.type !== "reddit-generador-template-package" || !parsed.template) {
-          alert('El archivo no contiene un paquete de plantilla de video válido.');
+          showAlert('El archivo seleccionado no contiene un paquete de plantilla de video válido.', 'Formato No Válido', 'warning');
           return;
         }
 
         const templateName = parsed.template.name;
         const profileName = parsed.profile ? parsed.profile.name : 'Ninguno';
 
-        if (confirm(`¿Deseas importar la plantilla "${templateName}"?\nSe asociará al perfil de IA: "${profileName}".`)) {
+        const ok = await showConfirm(
+          `¿Deseas importar la plantilla "${templateName}"?\nSe asociará al perfil de IA: "${profileName}".`,
+          'Importar Paquete de Plantilla',
+          { confirmText: 'Importar', cancelText: 'Cancelar', type: 'info' }
+        );
+
+        if (ok) {
           const res = await onImport(parsed);
           if (res.success) {
-            alert('¡Plantilla importada exitosamente!\nSi se creó un nuevo perfil de IA, recuerda configurarle su Gemini API Key en la sección Perfiles de IA.');
+            showToast(`¡Plantilla "${templateName}" importada exitosamente!`, 'success');
             if (res.newTemplateId) {
               setSelectedId(res.newTemplateId);
             }
           } else {
-            alert('Error al importar la plantilla: ' + res.error);
+            showAlert('Error al importar la plantilla: ' + res.error, 'Error de Importación', 'error');
           }
         }
       } catch (err) {
         console.error(err);
-        alert('Error al leer el archivo JSON: ' + err.message);
+        showAlert('Error al leer el archivo JSON: ' + err.message, 'Error de Lectura', 'error');
       }
     };
     
@@ -654,7 +668,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       const data = await res.json();
       if (data.base64) {
         setCardAvatar(data.base64); // Guardar Base64 para visualización directa
-        alert('Foto de perfil local cargada exitosamente.');
+        showToast('Foto de perfil local cargada exitosamente.', 'success');
       }
     } catch (err) {
       console.error('Error abriendo diálogo de imagen nativo:', err);
@@ -726,12 +740,12 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setPreviewAudioUrl(data.audioUrl);
         setPreviewWarningMsg('El archivo de voz temporal ha sido creado y se eliminará del servidor automáticamente en 1 minuto.');
       } else {
-        alert('Error generando la locución de prueba: ' + (data.error || 'Desconocido'));
+        showAlert(data.error || 'No se pudo generar la locución de prueba.', 'Error de Voz', 'error');
       }
     } catch (err) {
       clearInterval(progressInterval);
       console.error('Error generando locución de prueba:', err);
-      alert('Error de conexión al servidor local.');
+      showAlert('Error de conexión con el servidor local.', 'Error de Conexión', 'error');
     } finally {
       setPreviewLoading(false);
     }
@@ -819,7 +833,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
 
     if (saved && saved.id) {
       setSelectedId(saved.id);
-      alert('Plantilla guardada exitosamente.');
+      showToast(`Plantilla "${name}" guardada exitosamente.`, 'success');
     }
   };
 

@@ -9,8 +9,10 @@ import IntegrationsPanel from './components/IntegrationsPanel';
 import UpdateModal from './components/UpdateModal';
 import FloatingProgressDock from './components/FloatingProgressDock';
 import { Cpu, Film, Sparkles, RefreshCw, Zap, Bell, CheckCircle2 } from 'lucide-react';
+import { useUIModal } from './context/UIModalContext';
 
 export default function App() {
+  const { showConfirm, showToast } = useUIModal();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   
@@ -398,10 +400,17 @@ export default function App() {
   };
 
   const handleGlobalCancel = async () => {
-    if (!confirm('¿Estás seguro de que deseas cancelar la generación de videos actual?')) return;
+    const ok = await showConfirm(
+      '¿Estás seguro de que deseas cancelar la generación de videos actual? El render en curso se abortará.',
+      'Cancelar Generación',
+      { confirmText: 'Cancelar Proceso', cancelText: 'Mantener Generación', type: 'danger' }
+    );
+    if (!ok) return;
+
     setIsGlobalCancelling(true);
     try {
       await fetch('/api/jobs/cancel', { method: 'POST' });
+      showToast('Generación cancelada.', 'info');
     } catch (err) {
       console.error(err);
     } finally {

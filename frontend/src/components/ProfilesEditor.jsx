@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Save, Plus, Trash2, KeyRound, Cpu, FileText, CheckCircle2, FolderOpen, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { useUIModal } from '../context/UIModalContext';
 
 const GEMINI_MODELS = [
   { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash (Recomendado)' },
@@ -10,6 +11,7 @@ const GEMINI_MODELS = [
 ];
 
 export default function ProfilesEditor({ profiles, onSave, onDelete }) {
+  const { showToast, showAlert, showConfirm } = useUIModal();
   const loadedProfileIdRef = useRef(null);
   const [selectedId, setSelectedId] = useState('');
   const [name, setName] = useState('Nuevo Perfil Gemini');
@@ -38,25 +40,14 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
         return;
       }
       
-      let targetId = selectedId;
-      if (!targetId) {
-        targetId = profiles[0].id;
-      }
-
+      const targetId = selectedId || profiles[0].id;
       const active = profiles.find(p => p.id === targetId);
-      if (!active) {
-        // Esperar defensivamente a que la prop de perfiles se actualice asíncronamente desde el componente padre
-        return;
-      }
       
-      // Solo cargar los valores si cambiamos de perfil en la UI
-      if (loadedProfileIdRef.current !== targetId) {
-        if (selectedId !== active.id) {
-          setSelectedId(active.id);
-        }
-        setName(active.name);
-        const rawKey = active.apiKey || '';
-        const parsedKeys = rawKey.split(/[,\n]/).map(k => k.trim()).filter(Boolean);
+      // Solo actualizar estados si cambió el perfil seleccionado
+      if (active && loadedProfileIdRef.current !== targetId) {
+        if (!selectedId) setSelectedId(targetId);
+        setName(active.name || '');
+        const parsedKeys = (active.apiKey || '').split('\n').filter(Boolean);
         setApiKeys(parsedKeys.length > 0 ? parsedKeys : ['']);
         setSystemPrompt(active.systemPrompt || '');
         setBackgroundFolder(active.backgroundFolder || '');
@@ -102,6 +93,20 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     }
   };
 
+  const handleDeleteClick = async () => {
+    const activeProf = profiles.find(p => p.id === selectedId);
+    const profName = activeProf ? activeProf.name : 'este perfil';
+    const ok = await showConfirm(
+      `¿Estás seguro de que deseas eliminar permanentemente el perfil de IA "${profName}"?`,
+      'Eliminar Perfil de IA',
+      { confirmText: 'Eliminar', cancelText: 'Cancelar', type: 'danger' }
+    );
+    if (ok) {
+      await onDelete(selectedId);
+      showToast('Perfil de IA eliminado exitosamente.', 'success');
+    }
+  };
+
   const handleSaveSubmit = async (e) => {
     e.preventDefault();
     setSuccess('');
@@ -130,6 +135,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
       setSelectedId(savedProfile.id);
     }
     
+    showToast(`Perfil de IA "${name}" guardado exitosamente.`, 'success');
     setSuccess('Perfil de IA guardado exitosamente.');
     setTimeout(() => setSuccess(''), 3000);
   };
@@ -391,10 +397,11 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                       const selectEl = document.getElementById('add-fallback-select');
                       const selectedVal = selectEl.value;
                       if (fallbackModels.includes(selectedVal)) {
-                        alert('Este modelo ya está en la lista de prioridad.');
+                        showToast('Este modelo ya está en la lista de prioridad.', 'warning');
                         return;
                       }
                       setFallbackModels([...fallbackModels, selectedVal]);
+                      showToast('Modelo agregado a la secuencia de fallback.', 'info');
                     }}
                     className="bg-gray-800 hover:bg-gray-700 text-white font-extrabold px-3 py-2 rounded-xl text-[10px] border border-border-dark cursor-pointer transition-colors"
                   >
@@ -434,8 +441,8 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
               {profiles.length > 1 && selectedId && selectedId !== 'new' && (
                 <button
                   type="button"
-                  onClick={() => onDelete(selectedId)}
-                  className="flex items-center gap-2 bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 font-bold px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                  onClick={handleDeleteClick}
+                  className="flex items-center gap-2 bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 font-bold px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer active:scale-95"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Eliminar Perfil</span>

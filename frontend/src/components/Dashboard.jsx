@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import ProfileChainModal from './ProfileChainModal';
 import GenerationLogsConsole from './GenerationLogsConsole';
+import { useUIModal } from '../context/UIModalContext';
 
 const formatTime = (seconds) => {
   if (seconds === undefined || seconds === null) return '--:--';
@@ -36,6 +37,7 @@ export default function Dashboard({
   activeJob, logs = [], jobError = '', jobSuccess = '',
   onClearJobError, onClearJobSuccess
 }) {
+  const { showToast, showAlert, showConfirm } = useUIModal();
   const [seeds, setSeeds] = useState([]);
   const [count, setCount] = useState(1);
   const [selectedProfile, setSelectedProfile] = useState('');
@@ -99,13 +101,14 @@ export default function Dashboard({
       const res = await fetch('/api/jobs/retry-failed', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) {
-        alert(data.error || 'Error al reintentar videos fallidos');
+        showAlert(data.error || 'Error al reintentar videos fallidos', 'Error al Reintentar', 'error');
       } else {
         setLastFailedCount(0);
+        showToast('Reintentando videos fallidos en cola...', 'info');
       }
     } catch (err) {
       console.error(err);
-      alert('Error de conexión con el servidor.');
+      showAlert('Error de conexión con el servidor local.', 'Error de Conexión', 'error');
     } finally {
       setIsRetryingFailed(false);
     }
@@ -362,19 +365,25 @@ export default function Dashboard({
   };
 
   const handleCancelGeneration = async () => {
-    if (!confirm('¿Estás seguro de que deseas detener la generación de videos en curso? El proceso actual se abortará.')) {
-      return;
-    }
+    const ok = await showConfirm(
+      '¿Estás seguro de que deseas detener la generación de videos en curso? El proceso actual se abortará.',
+      'Detener Generación',
+      { confirmText: 'Detener Proceso', cancelText: 'Continuar Generando', type: 'danger' }
+    );
+    if (!ok) return;
+
     setIsCancelling(true);
     try {
       const res = await fetch('/api/jobs/cancel', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) {
-        alert('Error al detener la generación: ' + (data.error || 'Desconocido'));
+        showAlert('Error al detener la generación: ' + (data.error || 'Desconocido'), 'Error al Detener', 'error');
+      } else {
+        showToast('Solicitud de cancelación enviada correctamente.', 'info');
       }
     } catch (err) {
       console.error('Error al solicitar la detención del proceso:', err);
-      alert('Error de conexión con el servidor local.');
+      showAlert('Error de conexión con el servidor local.', 'Error de Conexión', 'error');
     } finally {
       setIsCancelling(false);
     }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Link, Users, ChevronRight, Info } from 'lucide-react';
+import { useUIModal } from '../context/UIModalContext';
 
 /**
  * ProfileChainModal
@@ -15,6 +16,7 @@ import { X, Link, Users, ChevronRight, Info } from 'lucide-react';
  *   initialChain - cadena previa (o null)
  */
 export default function ProfileChainModal({ isOpen, onClose, profiles = [], templates = [], onSave, initialChain = null }) {
+  const { showAlert } = useUIModal();
   // { [profileId]: boolean }
   const [selected, setSelected] = useState({});
   // { [profileId]: number }
@@ -69,7 +71,7 @@ export default function ProfileChainModal({ isOpen, onClose, profiles = [], temp
       });
 
     if (chain.length === 0) {
-      alert('Por favor selecciona al menos un perfil para la cadena.');
+      showAlert('Por favor selecciona al menos un perfil para activar la cadena.', 'Selección Requerida', 'warning');
       return;
     }
 

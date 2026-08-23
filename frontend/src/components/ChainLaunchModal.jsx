@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { X, Play, Layers } from 'lucide-react';
+import { useUIModal } from '../context/UIModalContext';
 
 export default function ChainLaunchModal({ isOpen, onClose, templates = [], profiles = [], settings = {}, onLaunch }) {
+  const { showAlert } = useUIModal();
   const [selected, setSelected] = useState({}); // { [templateId]: boolean }
   const [counts, setCounts] = useState({}); // { [templateId]: number }
 
@@ -24,7 +26,7 @@ export default function ChainLaunchModal({ isOpen, onClose, templates = [], prof
       }));
 
     if (batch.length === 0) {
-      alert('Por favor selecciona al menos una plantilla para iniciar la generación en cadena.');
+      showAlert('Por favor selecciona al menos una plantilla para iniciar la generación en cadena.', 'Selección Requerida', 'warning');
       return;
     }
 
