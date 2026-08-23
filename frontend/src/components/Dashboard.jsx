@@ -402,7 +402,7 @@ export default function Dashboard({
           <div className="text-left">
             <span className="text-[9px] font-black text-gray-400 block uppercase tracking-wider">BIBLIOTECA ACTIVA</span>
             <span className="text-xs font-extrabold text-white">
-              {backgroundStatus.count} fondos · Vídeo #{backgroundStatus.playhead?.currentVideoIndex || 0}
+              {backgroundStatus?.count || 0} fondos · Vídeo #{backgroundStatus?.playhead?.currentVideoIndex || 0}
             </span>
           </div>
         </div>

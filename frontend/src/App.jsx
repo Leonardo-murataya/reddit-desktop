@@ -129,13 +129,13 @@ export default function App() {
   const refreshBackgroundVideos = async (folder, profileId) => {
     try {
       let targetFolder = folder;
-      if (!targetFolder && profileId && profiles.length > 0) {
+      if (!targetFolder && profileId && Array.isArray(profiles) && profiles.length > 0) {
         const prof = profiles.find(p => p.id === profileId);
         if (prof && prof.backgroundFolder) {
           targetFolder = prof.backgroundFolder;
         }
       }
-      if (!targetFolder && settings.backgroundFolder) {
+      if (!targetFolder && settings?.backgroundFolder) {
         targetFolder = settings.backgroundFolder;
       }
 
@@ -145,7 +145,7 @@ export default function App() {
         body: JSON.stringify({ folder: targetFolder || '', profileId: profileId || '' })
       });
       const data = await res.json();
-      setBackgroundStatus(data);
+      setBackgroundStatus(data || { count: 0, totalDuration: 0, files: [], playhead: {} });
     } catch (err) {
       console.error('Error al consultar videos de fondo:', err);
     }
@@ -159,8 +159,8 @@ export default function App() {
         body: JSON.stringify(newSettings)
       });
       const data = await res.json();
-      setSettings(data);
-      refreshBackgroundVideos(data.backgroundFolder);
+      setSettings(data || newSettings);
+      refreshBackgroundVideos(data?.backgroundFolder || newSettings.backgroundFolder);
       return { success: true };
     } catch (err) {
       console.error(err);
@@ -176,8 +176,23 @@ export default function App() {
         body: JSON.stringify(profile)
       });
       const data = await res.json();
-      setProfiles(data);
-      return { success: true };
+      
+      // Actualizar lista de perfiles con seguridad de array
+      if (Array.isArray(data.profiles)) {
+        setProfiles(data.profiles);
+      } else if (Array.isArray(data)) {
+        setProfiles(data);
+      } else {
+        const listRes = await fetch('/api/profiles');
+        const listData = await listRes.json();
+        setProfiles(Array.isArray(listData) ? listData : []);
+      }
+
+      const savedProf = data.profile || profile;
+      if (savedProf?.backgroundFolder) {
+        refreshBackgroundVideos(savedProf.backgroundFolder, savedProf.id);
+      }
+      return savedProf || { success: true };
     } catch (err) {
       console.error(err);
       return { success: false, error: err.message };
@@ -188,7 +203,13 @@ export default function App() {
     try {
       const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
       const data = await res.json();
-      setProfiles(data);
+      if (Array.isArray(data.profiles)) {
+        setProfiles(data.profiles);
+      } else {
+        const listRes = await fetch('/api/profiles');
+        const listData = await listRes.json();
+        setProfiles(Array.isArray(listData) ? listData : []);
+      }
       return { success: true };
     } catch (err) {
       console.error(err);
@@ -204,8 +225,17 @@ export default function App() {
         body: JSON.stringify(template)
       });
       const data = await res.json();
-      setTemplates(data);
-      return { success: true };
+      
+      if (Array.isArray(data.templates)) {
+        setTemplates(data.templates);
+      } else if (Array.isArray(data)) {
+        setTemplates(data);
+      } else {
+        const listRes = await fetch('/api/templates');
+        const listData = await listRes.json();
+        setTemplates(Array.isArray(listData) ? listData : []);
+      }
+      return data.template || template || { success: true };
     } catch (err) {
       console.error(err);
       return { success: false, error: err.message };
@@ -216,7 +246,13 @@ export default function App() {
     try {
       const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
       const data = await res.json();
-      setTemplates(data);
+      if (Array.isArray(data.templates)) {
+        setTemplates(data.templates);
+      } else {
+        const listRes = await fetch('/api/templates');
+        const listData = await listRes.json();
+        setTemplates(Array.isArray(listData) ? listData : []);
+      }
       return { success: true };
     } catch (err) {
       console.error(err);
@@ -233,7 +269,13 @@ export default function App() {
           body: JSON.stringify(importedProfile)
         });
         const profData = await profRes.json();
-        setProfiles(profData);
+        if (Array.isArray(profData.profiles)) {
+          setProfiles(profData.profiles);
+        } else {
+          const listRes = await fetch('/api/profiles');
+          const listData = await listRes.json();
+          setProfiles(Array.isArray(listData) ? listData : []);
+        }
       }
 
       if (importedTemplate) {
@@ -243,7 +285,13 @@ export default function App() {
           body: JSON.stringify(importedTemplate)
         });
         const tempData = await tempRes.json();
-        setTemplates(tempData);
+        if (Array.isArray(tempData.templates)) {
+          setTemplates(tempData.templates);
+        } else {
+          const listRes = await fetch('/api/templates');
+          const listData = await listRes.json();
+          setTemplates(Array.isArray(listData) ? listData : []);
+        }
       }
 
       return { success: true };

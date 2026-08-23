@@ -589,12 +589,13 @@ app.post('/api/updates/check', handleCheckUpdates);
 // 3. Perfiles de API de IA
 app.get('/api/profiles', (req, res) => {
   const currentDb = db.readDb();
-  res.json(currentDb.profiles);
+  res.json(currentDb.profiles || []);
 });
 
 app.post('/api/profiles', (req, res) => {
   try {
     const currentDb = db.readDb();
+    if (!currentDb.profiles) currentDb.profiles = [];
     const newProfile = req.body;
     let savedProfile;
     
@@ -614,7 +615,7 @@ app.post('/api/profiles', (req, res) => {
     }
     
     db.writeDb(currentDb);
-    res.json({ success: true, profile: savedProfile });
+    res.json({ success: true, profile: savedProfile, profiles: currentDb.profiles });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -623,9 +624,9 @@ app.post('/api/profiles', (req, res) => {
 app.delete('/api/profiles/:id', (req, res) => {
   try {
     const currentDb = db.readDb();
-    currentDb.profiles = currentDb.profiles.filter(p => p.id !== req.params.id);
+    currentDb.profiles = (currentDb.profiles || []).filter(p => p.id !== req.params.id);
     db.writeDb(currentDb);
-    res.json({ success: true });
+    res.json({ success: true, profiles: currentDb.profiles });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -746,28 +747,33 @@ app.post('/api/fonts/upload', (req, res) => {
 // 4. Plantillas de Estilo (Templates)
 app.get('/api/templates', (req, res) => {
   const currentDb = db.readDb();
-  res.json(currentDb.templates);
+  res.json(currentDb.templates || []);
 });
 
 app.post('/api/templates', (req, res) => {
   try {
     const currentDb = db.readDb();
+    if (!currentDb.templates) currentDb.templates = [];
     const newTemplate = req.body;
+    let savedTemplate;
     
     if (!newTemplate.id) {
       newTemplate.id = uuidv4();
       currentDb.templates.push(newTemplate);
+      savedTemplate = newTemplate;
     } else {
       const idx = currentDb.templates.findIndex(t => t.id === newTemplate.id);
       if (idx !== -1) {
         currentDb.templates[idx] = newTemplate;
+        savedTemplate = newTemplate;
       } else {
         currentDb.templates.push(newTemplate);
+        savedTemplate = newTemplate;
       }
     }
     
     db.writeDb(currentDb);
-    res.json({ success: true, template: newTemplate });
+    res.json({ success: true, template: savedTemplate, templates: currentDb.templates });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -776,9 +782,9 @@ app.post('/api/templates', (req, res) => {
 app.delete('/api/templates/:id', (req, res) => {
   try {
     const currentDb = db.readDb();
-    currentDb.templates = currentDb.templates.filter(t => t.id !== req.params.id);
+    currentDb.templates = (currentDb.templates || []).filter(t => t.id !== req.params.id);
     db.writeDb(currentDb);
-    res.json({ success: true });
+    res.json({ success: true, templates: currentDb.templates });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -798,51 +804,33 @@ app.post('/api/templates/import', (req, res) => {
       // Clean API key (blank out if not present, to match client clean, but keep safety)
       const cleanProfile = { ...profile, apiKey: profile.apiKey || '' };
       
-      // Look for existing profile by ID or name
-      const existingProfileIdx = currentDb.profiles.findIndex(p => p.id === cleanProfile.id || p.name === cleanProfile.name);
-      if (existingProfileIdx !== -1) {
-        // Match found! Preserve their existing API Key if they already have one!
-        const existingApiKey = currentDb.profiles[existingProfileIdx].apiKey;
-        if (existingApiKey) {
-          cleanProfile.apiKey = existingApiKey;
-        }
-        currentDb.profiles[existingProfileIdx] = cleanProfile;
-        finalProfileId = cleanProfile.id;
-      } else {
-        // New profile!
-        if (!cleanProfile.id) {
-          cleanProfile.id = uuidv4();
-        }
-        currentDb.profiles.push(cleanProfile);
-        finalProfileId = cleanProfile.id;
-      }
+      const newProfId = uuidv4();
+      cleanProfile.id = newProfId;
+      cleanProfile.name = `${cleanProfile.name || 'Perfil'} (Importado)`;
+      if (!currentDb.profiles) currentDb.profiles = [];
+      currentDb.profiles.push(cleanProfile);
+      finalProfileId = newProfId;
     }
     
-    const cleanTemplate = { ...template };
-    if (finalProfileId) {
-      cleanTemplate.profileId = finalProfileId;
-    }
+    const newTempId = uuidv4();
+    const newTemplate = {
+      ...template,
+      id: newTempId,
+      name: `${template.name || 'Plantilla'} (Importada)`,
+      profileId: finalProfileId || template.profileId || null
+    };
     
-    // Generar un nuevo ID de plantilla único para permitir duplicados sin colisión
-    cleanTemplate.id = uuidv4();
-    
-    // Si ya existe otra plantilla con el mismo nombre, le agregamos un sufijo
-    let tempName = cleanTemplate.name;
-    let nameSuffix = 1;
-    while (currentDb.templates.some(t => t.name === tempName)) {
-      tempName = `${cleanTemplate.name} (${nameSuffix})`;
-      nameSuffix++;
-    }
-    cleanTemplate.name = tempName;
-    
-    currentDb.templates.push(cleanTemplate);
-    
+    if (!currentDb.templates) currentDb.templates = [];
+    currentDb.templates.push(newTemplate);
     db.writeDb(currentDb);
-    res.json({ 
-      success: true, 
-      templates: currentDb.templates, 
-      profiles: currentDb.profiles,
-      newTemplateId: cleanTemplate.id 
+    
+    res.json({
+      success: true,
+      newTemplateId: newTempId,
+      newProfileId: finalProfileId,
+      template: newTemplate,
+      templates: currentDb.templates,
+      profiles: currentDb.profiles
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -850,13 +838,17 @@ app.post('/api/templates/import', (req, res) => {
 });
 
 // 5. Escaneo de Videos de Fondo Locales
-app.get('/api/background-videos', (req, res) => {
+const handleBackgroundScan = (req, res) => {
   try {
     const currentDb = db.readDb();
-    const bgFolder = req.query.folder || currentDb.settings.backgroundFolder || currentDb.timeline.backgroundFolder || '';
+    const bgFolder = req.query.folder || req.body?.folder || currentDb.settings.backgroundFolder || currentDb.timeline.backgroundFolder || '';
+    const profileId = req.query.profileId || req.body?.profileId || 'global';
     
+    const profile = profileId !== 'global' ? currentDb.profiles?.find(p => p.id === profileId) : null;
+    const playhead = profile ? (profile.timeline || { currentVideoIndex: 0, currentOffset: 0, backgroundVideos: [] }) : (currentDb.timeline || { currentVideoIndex: 0, currentOffset: 0, backgroundVideos: [] });
+
     if (!bgFolder || !fs.existsSync(bgFolder)) {
-      return res.json({ count: 0, duration: 0, files: [] });
+      return res.json({ count: 0, totalDuration: 0, duration: 0, files: [], playhead });
     }
     
     const videos = timeline.scanBackgroundVideos(bgFolder);
@@ -872,20 +864,22 @@ app.get('/api/background-videos', (req, res) => {
       };
     });
     
-    const profileId = req.query.profileId || 'global';
-    const profile = profileId !== 'global' ? currentDb.profiles?.find(p => p.id === profileId) : null;
-    const playhead = profile ? (profile.timeline || { currentVideoIndex: 0, currentOffset: 0, backgroundVideos: [] }) : (currentDb.timeline || { currentVideoIndex: 0, currentOffset: 0, backgroundVideos: [] });
-    
     res.json({
       count: fileInfos.length,
       totalDuration: Math.round(totalDur),
+      duration: Math.round(totalDur),
       files: fileInfos,
       playhead: playhead
     });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, count: 0, totalDuration: 0, files: [], playhead: {} });
   }
-});
+};
+
+app.get('/api/background-videos', handleBackgroundScan);
+app.post('/api/background-videos', handleBackgroundScan);
+app.get('/api/background/status', handleBackgroundScan);
+app.post('/api/background/status', handleBackgroundScan);
 
 // 5b. Diálogos Nativos de Windows vía PowerShell
 app.get('/api/dialog/folder', (req, res) => {
