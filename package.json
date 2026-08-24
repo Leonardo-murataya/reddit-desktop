@@ -9,8 +9,10 @@
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "build:all": "npm run build --prefix frontend",
-    "server": "node server.js"
+    "server": "node server.js",
+    "client": "npm run dev --prefix frontend",
+    "dev:all": "concurrently \"npm run server\" \"npm run client\"",
+    "build:all": "npm run build --prefix frontend"
   },
   "keywords": [
     "reddit",
