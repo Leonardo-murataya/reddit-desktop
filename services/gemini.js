@@ -1,4 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 
 // Mapa dinámico en memoria para registrar modelos temporalmente agotados o sobrecargados
 const exhaustedModels = new Map(); // modelName -> expiryTimestamp
@@ -43,9 +43,6 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
   }
 
   let keyIndex = 0;
-
-  // Importar el SDK de Google Gen AI.
-  const { GoogleGenerativeAI } = require('@google/generative-ai');
   
   // Inicializamos el cliente
   // NOTA IMPORTANTE PARA EL USUARIO:
@@ -180,7 +177,14 @@ Reglas estrictas de redacción:
 
   const maxAttempts = (parseInt(primaryAttempts) || 2) + (parseInt(fallbackAttempts) || 3);
   let attempt = 0;
-  const delay = 5000; // Retardo constante de 5 segundos para reintentos
+  const safetySettings = [
+    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+  ];
+
+  let isSafetyRetry = false;
 
   while (attempt < maxAttempts) {
     attempt++;
@@ -191,8 +195,14 @@ Reglas estrictas de redacción:
     try {
       const model = ai.getGenerativeModel({
         model: activeModel,
-        systemInstruction: systemPrompt
+        systemInstruction: systemPrompt,
+        safetySettings
       });
+
+      let promptToSend = promptCompleto;
+      if (isSafetyRetry) {
+        promptToSend += `\n\n[AVISO DE POLÍTICAS]: Asegúrate de adaptar cualquier elemento de conflicto o tensión para que cumpla con los lineamientos comunitarios (evita autolesiones, violencia gráfica o lenguaje prohibido) manteniendo el suspenso y la intriga.`;
+      }
 
       let timeoutId;
       const timeoutPromise = new Promise((_, reject) => {
@@ -204,19 +214,28 @@ Reglas estrictas de redacción:
       let result;
       try {
         const generatePromise = model.generateContent({
-          contents: [{ role: 'user', parts: [{ text: promptCompleto }] }],
+          contents: [{ role: 'user', parts: [{ text: promptToSend }] }],
           generationConfig: {
             responseMimeType: 'application/json',
             responseSchema: schema,
             temperature: 0.9
-          }
+          },
+          safetySettings
         });
         result = await Promise.race([generatePromise, timeoutPromise]);
       } finally {
         clearTimeout(timeoutId);
       }
 
-      let responseText = result.response.text();
+      let responseText = '';
+      try {
+        responseText = result.response.text();
+      } catch (textErr) {
+        const candidate = result.response?.candidates?.[0];
+        const finishReason = candidate?.finishReason || result.response?.promptFeedback?.blockReason;
+        throw new Error(`Contenido bloqueado por filtros de seguridad de Gemini (${finishReason || textErr.message})`);
+      }
+
       console.log('Respuesta cruda de Gemini:', responseText);
       
       // Sanitizar la respuesta en caso de que Gemini añada bloques de código markdown
@@ -309,6 +328,22 @@ Reglas estrictas de redacción:
         }
       }
 
+      const isSafetyError = (error.message && (
+        error.message.includes('SAFETY') ||
+        error.message.includes('filtros de seguridad') ||
+        error.message.includes('blockReason') ||
+        error.message.includes('blocked due to')
+      ));
+
+      if (isSafetyError) {
+        isSafetyRetry = true;
+        console.log('[Gemini] Filtro de seguridad activado por temática. Suavizando contexto y probando modelo alternativo...');
+        const nextModel = getNextAvailableModel(activeModel);
+        activeModel = nextModel;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+
       // Si es un error de autenticación y ya no tenemos más claves para probar, lanzamos el error inmediatamente
       if (isAuthError) {
         throw error;
@@ -349,7 +384,7 @@ Reglas estrictas de redacción:
         }
       }
 
-      const currentDelay = delay;
+      const currentDelay = 5000;
       console.log(`[Gemini] Error transitorio detectado. Reintentando en ${currentDelay / 1000} segundos...`);
       
       await new Promise(resolve => setTimeout(resolve, currentDelay));

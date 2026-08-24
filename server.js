@@ -1280,54 +1280,62 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
 
       if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
 
-      broadcastProgress({ 
-        type: 'status', 
-        status: 'processing', 
-        activeJob: job, 
-        log: `${videoNumStr} [${template.name}] Generando guion usando Gemini API...` 
-      });
-
-      // 1. LLAMAR A GEMINI PARA GENERAR LA HISTORIA Y DETECTAR GÉNERO
-      const currentPrompt = currentItem.prompt || template.defaultIdea || 'Inventa una historia dramática';
-
-      let effectiveSystemPrompt = profile.systemPrompt;
-      if (template.multiVoiceEnabled) {
-        const extension = template.multiVoicePromptExtension || '';
-        effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n[INSTRUCCIÓN DE DIÁLOGOS MULTI-VOZ ACTIVA]\n${extension}\nLímite máximo de voces/personajes a usar: ${template.multiVoiceMaxVoices || 4}.`;
-      }
-
-      const primaryAttempts = profile.primaryAttempts !== undefined ? parseInt(profile.primaryAttempts) : 2;
-      const fallbackAttempts = profile.fallbackAttempts !== undefined ? parseInt(profile.fallbackAttempts) : 3;
-      const fallbackModels = profile.fallbackModels || profile.fallbackModel || 'gemini-2.5-flash';
-      const story = await gemini.generateStory(
-        profile.apiKey,
-        profile.model,
-        currentPrompt,
-        effectiveSystemPrompt,
-        primaryAttempts,
-        fallbackAttempts,
-        fallbackModels
-      );
-      if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
-
-      if (story.dialogues && !story.content) {
-        story.content = story.dialogues.map(d => `${d.role}: "${d.text}"`).join('\n');
-      }
-
-      broadcastProgress({ 
-        type: 'status', 
-        status: 'processing', 
-        activeJob: job, 
-        log: `${videoNumStr} Guion generado con éxito. Título: "${story.title}". Género clasificado: ${story.gender === 'male' ? 'Masculino (Jorge)' : 'Femenino (Dalia)'}` 
-      });
-
-      // Crear subcarpeta temporal limpia y única para este video específico
       const jobTempDir = path.join(TEMP_DIR, `video_${index}_${uuidv4().substring(0, 8)}`);
-      if (!fs.existsSync(jobTempDir)) {
-        fs.mkdirSync(jobTempDir, { recursive: true });
-      }
 
       try {
+        if (!template) {
+          throw new Error(`Plantilla no encontrada para el elemento ${index + 1}.`);
+        }
+        if (!profile || !profile.apiKey) {
+          throw new Error(`El perfil asignado para "${template.name}" no tiene API Key configurada.`);
+        }
+
+        broadcastProgress({ 
+          type: 'status', 
+          status: 'processing', 
+          activeJob: job, 
+          log: `${videoNumStr} [${template.name}] Generando guion usando Gemini API...` 
+        });
+
+        // 1. LLAMAR A GEMINI PARA GENERAR LA HISTORIA Y DETECTAR GÉNERO
+        const currentPrompt = currentItem.prompt || template.defaultIdea || 'Inventa una historia dramática';
+
+        let effectiveSystemPrompt = profile.systemPrompt;
+        if (template.multiVoiceEnabled) {
+          const extension = template.multiVoicePromptExtension || '';
+          effectiveSystemPrompt = `${effectiveSystemPrompt}\n\n[INSTRUCCIÓN DE DIÁLOGOS MULTI-VOZ ACTIVA]\n${extension}\nLímite máximo de voces/personajes a usar: ${template.multiVoiceMaxVoices || 4}.`;
+        }
+
+        const primaryAttempts = profile.primaryAttempts !== undefined ? parseInt(profile.primaryAttempts) : 2;
+        const fallbackAttempts = profile.fallbackAttempts !== undefined ? parseInt(profile.fallbackAttempts) : 3;
+        const fallbackModels = profile.fallbackModels || profile.fallbackModel || 'gemini-2.5-flash';
+        const story = await gemini.generateStory(
+          profile.apiKey,
+          profile.model,
+          currentPrompt,
+          effectiveSystemPrompt,
+          primaryAttempts,
+          fallbackAttempts,
+          fallbackModels
+        );
+        if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
+
+        if (story.dialogues && !story.content) {
+          story.content = story.dialogues.map(d => `${d.role}: "${d.text}"`).join('\n');
+        }
+
+        broadcastProgress({ 
+          type: 'status', 
+          status: 'processing', 
+          activeJob: job, 
+          log: `${videoNumStr} Guion generado con éxito. Título: "${story.title}". Género clasificado: ${story.gender === 'male' ? 'Masculino (Jorge)' : 'Femenino (Dalia)'}` 
+        });
+
+        // Crear subcarpeta temporal limpia y única para este video específico
+        if (!fs.existsSync(jobTempDir)) {
+          fs.mkdirSync(jobTempDir, { recursive: true });
+        }
+
         // Rutas de archivos temporales
         const titleAudioPath = path.join(jobTempDir, 'title.mp3');
         const bodyAudioPath = path.join(jobTempDir, 'body.mp3');
@@ -1778,19 +1786,28 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         }
 
       } catch (err) {
-        console.error(`Error en video ${index + 1}:`, err);
+        if (cancelRequested || (err.message && err.message.includes('cancelada por solicitud'))) {
+          throw err;
+        }
+
+        console.error(`[Fila ${index + 1}] Error procesando video:`, err);
         broadcastProgress({
           type: 'status',
           status: 'processing',
           activeJob: job,
-          log: `[FALLO] ${videoNumStr} No se pudo generar este video: ${err.message}`
+          log: `[FALLO OMITIDO] ${videoNumStr} No se pudo generar este video (${err.message}). Continuando automáticamente con el siguiente video de la cola...`
         });
+
         failedItems.push({
           templateId: currentItem.templateId,
           profileId: currentItem.profileId,
           count: 1,
-          prompt: currentItem.prompt
+          prompt: currentItem.prompt,
+          error: err.message
         });
+
+        job.failedCount = failedItems.length;
+        job.failedItems = failedItems;
       } finally {
         // Limpieza de subcarpeta temporal garantizada tanto en éxito como en fallo
         try {
