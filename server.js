@@ -1495,6 +1495,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           // Compilar 9:16
           const finalVideoPath916 = path.join(exportFolder, `video ${job.currentVideoIndex} 9-16 ${safeTitle}.mp4`);
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Compilando formato 9:16 vertical (Archivo: video ${job.currentVideoIndex} 9-16 ${safeTitle}.mp4)...` });
+          let lastLogged916 = -1;
           await ffmpeg.compileVideo({
             backgroundSegments: segments,
             cardImagePath,
@@ -1528,17 +1529,23 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             watermarkImageOffsetY: template.watermarkImageOffsetY !== undefined ? template.watermarkImageOffsetY : 20
           }, (percent) => {
             job.progress = Math.round(percent * 0.5);
+            const isMilestone = (percent > 0 && percent % 10 === 0) || percent === 100;
+            const shouldLog = isMilestone && percent !== lastLogged916;
+            if (shouldLog) {
+              lastLogged916 = percent;
+            }
             broadcastProgress({ 
               type: 'progress', 
               activeJob: job, 
               percent: job.progress, 
-              log: `${videoNumStr} Progreso de codificación 9:16: ${percent}%` 
+              log: shouldLog ? `${videoNumStr} Progreso de codificación 9:16: ${percent}%` : null 
             });
           });
 
           // Compilar 16:9
           const finalVideoPath169 = path.join(exportFolder, `video ${job.currentVideoIndex} 16-9 ${safeTitle}.mp4`);
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Compilando formato 16:9 horizontal (Archivo: video ${job.currentVideoIndex} 16-9 ${safeTitle}.mp4)...` });
+          let lastLogged169 = -1;
           await ffmpeg.compileVideo({
             backgroundSegments: segments, // Mismos segmentos de fondo para sincro perfecta!
             cardImagePath,
@@ -1572,11 +1579,16 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             watermarkImageOffsetY: template.watermarkImageOffsetY !== undefined ? template.watermarkImageOffsetY : 20
           }, (percent) => {
             job.progress = 50 + Math.round(percent * 0.5);
+            const isMilestone = (percent > 0 && percent % 10 === 0) || percent === 100;
+            const shouldLog = isMilestone && percent !== lastLogged169;
+            if (shouldLog) {
+              lastLogged169 = percent;
+            }
             broadcastProgress({ 
               type: 'progress', 
               activeJob: job, 
               percent: job.progress, 
-              log: `${videoNumStr} Progreso de codificación 16:9: ${percent}%` 
+              log: shouldLog ? `${videoNumStr} Progreso de codificación 16:9: ${percent}%` : null 
             });
           });
 
@@ -1631,6 +1643,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           const finalVideoPath = path.join(exportFolder, `${videoName}.mp4`);
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Iniciando codificación FFmpeg (Archivo: ${videoName}.mp4)...` });
 
+          let lastLoggedPercent = -1;
           await ffmpeg.compileVideo({
             backgroundSegments: segments,
             cardImagePath,
@@ -1667,11 +1680,16 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             watermarkImageOffsetY: template.watermarkImageOffsetY !== undefined ? template.watermarkImageOffsetY : 20
           }, (percent) => {
             job.progress = percent;
+            const isMilestone = (percent > 0 && percent % 10 === 0) || percent === 100;
+            const shouldLog = isMilestone && percent !== lastLoggedPercent;
+            if (shouldLog) {
+              lastLoggedPercent = percent;
+            }
             broadcastProgress({ 
               type: 'progress', 
               activeJob: job, 
               percent, 
-              log: `${videoNumStr} Progreso de codificación FFmpeg: ${percent}%` 
+              log: shouldLog ? `${videoNumStr} Progreso de codificación FFmpeg: ${percent}%` : null 
             });
           });
 

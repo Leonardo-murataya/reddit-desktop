@@ -31,16 +31,16 @@ const PIPELINE_STEPS = [
 const detectActivePipelineStep = (currentStepText = '', isCompleted = false) => {
   if (isCompleted) return 'done';
   const text = (currentStepText || '').toLowerCase();
-  if (text.includes('ffmpeg') || text.includes('render') || text.includes('gpu') || text.includes('ensamblando') || text.includes('codificando')) {
+  if (text.includes('ffmpeg') || text.includes('render') || text.includes('gpu') || text.includes('ensamblando') || text.includes('codific') || text.includes('compilando')) {
     return 'render';
   }
-  if (text.includes('subtítulo') || text.includes('srt') || text.includes('transcri') || text.includes('whisper') || text.includes('palabras')) {
+  if (text.includes('subtítulo') || text.includes('subtitulo') || text.includes('srt') || text.includes('tarjeta') || text.includes('puppeteer') || text.includes('transcri')) {
     return 'subtitles';
   }
-  if (text.includes('tts') || text.includes('audio') || text.includes('voz') || text.includes('edge') || text.includes('generando audio')) {
+  if (text.includes('tts') || text.includes('audio') || text.includes('voz') || text.includes('voces') || text.includes('sintetizando') || text.includes('edge')) {
     return 'audio';
   }
-  if (text.includes('ia') || text.includes('guión') || text.includes('historia') || text.includes('prompt') || text.includes('gemini') || text.includes('reddit')) {
+  if (text.includes('ia') || text.includes('guión') || text.includes('guion') || text.includes('historia') || text.includes('prompt') || text.includes('gemini') || text.includes('reddit')) {
     return 'script';
   }
   return 'script';
@@ -48,8 +48,6 @@ const detectActivePipelineStep = (currentStepText = '', isCompleted = false) => 
 
 // Clasificador y parseador de badges
 const parseLogEntry = (log) => {
-  const text = log.toLowerCase();
-  
   // Extraer timestamp si existe [HH:MM:SS]
   let timestamp = '';
   let content = log;
@@ -59,34 +57,94 @@ const parseLogEntry = (log) => {
     content = timeMatch[2];
   }
 
+  // Quitar el prefijo del tipo "[Video X/Y]" para analizar el contenido real del mensaje sin que la palabra "video" interfiera
+  const normalizedForClassification = content
+    .replace(/^\[video\s*\d+\/\d+\]\s*/i, '')
+    .toLowerCase();
+
   let tag = 'INFO';
   let badgeColor = 'bg-gray-500/15 text-gray-400 border-gray-500/30';
   let rowTextColor = 'text-gray-300';
 
-  if (text.includes('error') || text.includes('falló') || text.includes('❌') || text.includes('exception')) {
+  if (
+    normalizedForClassification.includes('error') || 
+    normalizedForClassification.includes('falló') || 
+    normalizedForClassification.includes('fallo') || 
+    normalizedForClassification.includes('❌') || 
+    normalizedForClassification.includes('exception') || 
+    normalizedForClassification.includes('crítico')
+  ) {
     tag = 'ERROR';
     badgeColor = 'bg-red-500/20 text-red-400 border-red-500/40 shadow-sm shadow-red-500/20';
     rowTextColor = 'text-red-300 font-semibold';
-  } else if (text.includes('completado') || text.includes('exitosamente') || text.includes('🎉') || text.includes('100%')) {
-    tag = 'ÉXITO';
-    badgeColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
-    rowTextColor = 'text-emerald-300 font-semibold';
-  } else if (text.includes('ffmpeg') || text.includes('render') || text.includes('gpu') || text.includes('video') || text.includes('nvenc') || text.includes('qsv') || text.includes('amf')) {
-    tag = 'RENDER';
-    badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
-    rowTextColor = 'text-indigo-200';
-  } else if (text.includes('tts') || text.includes('audio') || text.includes('voz') || text.includes('edge')) {
-    tag = 'AUDIO';
-    badgeColor = 'bg-violet-500/20 text-violet-300 border-violet-500/30';
-    rowTextColor = 'text-violet-200';
-  } else if (text.includes('subtítulo') || text.includes('srt') || text.includes('transcri')) {
-    tag = 'SRT';
-    badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
-    rowTextColor = 'text-cyan-200';
-  } else if (text.includes('ia') || text.includes('historia') || text.includes('prompt') || text.includes('gemini') || text.includes('reddit')) {
+  } else if (
+    normalizedForClassification.includes('gemini') || 
+    normalizedForClassification.includes('guion') || 
+    normalizedForClassification.includes('guión') || 
+    normalizedForClassification.includes('historia') || 
+    normalizedForClassification.includes('género clasificado') || 
+    normalizedForClassification.includes('título') || 
+    normalizedForClassification.includes('prompt') || 
+    normalizedForClassification.includes('diálogos') ||
+    normalizedForClassification.includes('dialogos') ||
+    normalizedForClassification.includes('personaje') ||
+    normalizedForClassification.includes('reddit') ||
+    normalizedForClassification.includes('generando guion')
+  ) {
     tag = 'IA';
     badgeColor = 'bg-amber-500/20 text-amber-300 border-amber-500/30';
     rowTextColor = 'text-amber-200';
+  } else if (
+    normalizedForClassification.includes('tts') || 
+    normalizedForClassification.includes('audio') || 
+    normalizedForClassification.includes('voz') || 
+    normalizedForClassification.includes('voces') || 
+    normalizedForClassification.includes('sintetizando') || 
+    normalizedForClassification.includes('edge') || 
+    normalizedForClassification.includes('audios') || 
+    normalizedForClassification.includes('frase')
+  ) {
+    tag = 'AUDIO';
+    badgeColor = 'bg-violet-500/20 text-violet-300 border-violet-500/30';
+    rowTextColor = 'text-violet-200';
+  } else if (
+    normalizedForClassification.includes('subtítulo') || 
+    normalizedForClassification.includes('subtitulo') || 
+    normalizedForClassification.includes('srt') || 
+    normalizedForClassification.includes('ass') || 
+    normalizedForClassification.includes('transcri') || 
+    normalizedForClassification.includes('tarjeta') || 
+    normalizedForClassification.includes('puppeteer')
+  ) {
+    tag = 'SRT';
+    badgeColor = 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30';
+    rowTextColor = 'text-cyan-200';
+  } else if (
+    normalizedForClassification.includes('ffmpeg') || 
+    normalizedForClassification.includes('render') || 
+    normalizedForClassification.includes('gpu') || 
+    normalizedForClassification.includes('codific') || 
+    normalizedForClassification.includes('nvenc') || 
+    normalizedForClassification.includes('qsv') || 
+    normalizedForClassification.includes('amf') || 
+    normalizedForClassification.includes('compilando') || 
+    normalizedForClassification.includes('progreso')
+  ) {
+    tag = 'RENDER';
+    badgeColor = 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30';
+    rowTextColor = 'text-indigo-200';
+  } else if (
+    normalizedForClassification.includes('creados con éxito') || 
+    normalizedForClassification.includes('compilado con éxito') || 
+    normalizedForClassification.includes('completado') || 
+    normalizedForClassification.includes('exitosamente') || 
+    normalizedForClassification.includes('🎉') || 
+    normalizedForClassification.includes('guardados en:') || 
+    normalizedForClassification.includes('reporte')
+  ) {
+    tag = 'ÉXITO';
+    badgeColor = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+    rowTextColor = 'text-emerald-300 font-semibold';
   }
 
   return { timestamp, content, tag, badgeColor, rowTextColor, original: log };
@@ -117,7 +175,7 @@ export default function GenerationLogsConsole({
       .filter((item) => {
         if (filterType !== 'ALL') {
           if (filterType === 'ERROR' && item.tag !== 'ERROR') return false;
-          if (filterType === 'RENDER' && item.tag !== 'RENDER') return false;
+          if (filterType === 'RENDER' && item.tag !== 'RENDER' && item.tag !== 'ÉXITO') return false;
           if (filterType === 'AUDIO' && item.tag !== 'AUDIO' && item.tag !== 'SRT') return false;
           if (filterType === 'IA' && item.tag !== 'IA') return false;
         }
@@ -137,11 +195,11 @@ export default function GenerationLogsConsole({
     let iaCount = 0;
 
     visibleLogs.forEach((log) => {
-      const t = log.toLowerCase();
-      if (t.includes('error') || t.includes('falló') || t.includes('❌')) errorCount++;
-      if (t.includes('ffmpeg') || t.includes('render') || t.includes('gpu')) renderCount++;
-      if (t.includes('tts') || t.includes('audio') || t.includes('voz') || t.includes('subtítulo')) audioCount++;
-      if (t.includes('ia') || t.includes('historia') || t.includes('gemini')) iaCount++;
+      const parsed = parseLogEntry(log);
+      if (parsed.tag === 'ERROR') errorCount++;
+      if (parsed.tag === 'RENDER' || parsed.tag === 'ÉXITO') renderCount++;
+      if (parsed.tag === 'AUDIO' || parsed.tag === 'SRT') audioCount++;
+      if (parsed.tag === 'IA') iaCount++;
     });
 
     return { errorCount, renderCount, audioCount, iaCount, total: visibleLogs.length };
@@ -366,7 +424,7 @@ export default function GenerationLogsConsole({
                 : 'text-gray-400 hover:text-indigo-300 hover:bg-white/5'
             }`}
           >
-            Render / GPU
+            Render / GPU ({counts.renderCount})
           </button>
 
           <button
@@ -378,7 +436,7 @@ export default function GenerationLogsConsole({
                 : 'text-gray-400 hover:text-violet-300 hover:bg-white/5'
             }`}
           >
-            Audio & TTS
+            Audio & TTS ({counts.audioCount})
           </button>
 
           <button
@@ -390,7 +448,7 @@ export default function GenerationLogsConsole({
                 : 'text-gray-400 hover:text-amber-300 hover:bg-white/5'
             }`}
           >
-            Historias IA
+            Historias IA ({counts.iaCount})
           </button>
         </div>
 
