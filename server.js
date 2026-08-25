@@ -523,10 +523,29 @@ const handleCheckUpdates = async (req, res) => {
 
     if (!fetchRes.ok) {
       if (fetchRes.status === 404) {
+        // Fallback a consultar tags de Git directamente si no hay Release formal creada en la web
+        const tagsRes = await fetch(`https://api.github.com/repos/${repo}/tags`, { headers });
+        if (tagsRes.ok) {
+          const tags = await tagsRes.json();
+          if (tags && tags.length > 0) {
+            const latestTag = tags[0].name.replace(/^v/, '');
+            const hasUpdate = compareVersions(latestTag, currentVersion) > 0;
+            return res.json({
+              hasUpdate,
+              currentVersion,
+              latestVersion: latestTag,
+              releaseTitle: `Reddit Video Generator v${latestTag}`,
+              releaseNotes: 'Nueva versión disponible en el repositorio de GitHub.',
+              publishedAt: new Date().toISOString(),
+              releaseUrl: `https://github.com/${repo}/releases/tag/v${latestTag}`,
+              assets: []
+            });
+          }
+        }
         return res.json({
           hasUpdate: false,
           currentVersion,
-          message: 'No se encontraron lanzamientos publicados (Releases) en el repositorio o se requiere un Token de solo lectura válido para este repositorio privado.'
+          message: 'No se encontraron lanzamientos publicados en el repositorio.'
         });
       }
       if (fetchRes.status === 401 || fetchRes.status === 403) {
