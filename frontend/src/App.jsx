@@ -28,7 +28,6 @@ export default function App() {
   // Estado de Actualizaciones
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [showTestUpdateModal, setShowTestUpdateModal] = useState(true);
 
   // Estado global del job activo (SSE al nivel de App para no perder eventos al cambiar de tab)
   const [activeJob, setActiveJob] = useState(null);
@@ -114,15 +113,12 @@ export default function App() {
 
       // 6. Verificar actualización silenciosa de fondo al arrancar si está habilitado
       if (settingsData.autoCheckUpdate !== false) {
-        fetch('/api/updates/check')
-          .then(r => r.json())
-          .then(info => {
-            if (info && info.hasUpdate) {
-              setUpdateInfo(info);
-              setShowUpdateModal(true);
-            }
-          })
-          .catch(e => console.log('Sin conexión de actualización:', e.message));
+        performUpdateCheck(settingsData).then(info => {
+          if (info && info.hasUpdate) {
+            setUpdateInfo(info);
+            setShowUpdateModal(true);
+          }
+        }).catch(() => {});
       }
     } catch (err) {
       console.error('Error cargando datos iniciales:', err);
@@ -431,23 +427,102 @@ export default function App() {
     }
   };
 
+  const performUpdateCheck = async (customSettings = null) => {
+    const currentVer = '1.0.0';
+    
+    // 1. Intentar consultar a través del backend local
+    try {
+      const res = await fetch('/api/updates/check');
+      if (res.ok) {
+        const info = await res.json();
+        if (info && (info.hasUpdate !== undefined || info.currentVersion)) {
+          return info;
+        }
+      }
+    } catch (localErr) {
+      console.log('Backend local no disponible para updates, consultando GitHub directamente...');
+    }
+
+    // 2. Fallback: Consultar directamente la API de GitHub desde el cliente
+    try {
+      const cfg = customSettings || settings || {};
+      const repo = cfg.githubRepo || 'Leonardo-murataya/reddit-desktop';
+      const token = cfg.githubToken || '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';
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      const compareVersions = (v1, v2) => {
+        const p1 = (v1 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+        const p2 = (v2 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+        for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+          const num1 = p1[i] || 0;
+          const num2 = p2[i] || 0;
+          if (num1 > num2) return 1;
+          if (num1 < num2) return -1;
+        }
+        return 0;
+      };
+
+      const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers });
+      if (res.ok) {
+        const rel = await res.json();
+        const latestTag = (rel.tag_name || '').replace(/^v/, '');
+        const hasUpdate = compareVersions(latestTag, currentVer) > 0;
+        return {
+          hasUpdate,
+          currentVersion: currentVer,
+          latestVersion: latestTag,
+          releaseTitle: rel.name || rel.tag_name,
+          releaseNotes: rel.body || 'Sin notas de versión disponibles.',
+          publishedAt: rel.published_at,
+          releaseUrl: rel.html_url,
+          assets: (rel.assets || []).map(a => ({
+            name: a.name,
+            size: a.size,
+            downloadUrl: a.browser_download_url
+          }))
+        };
+      }
+
+      // Si releases/latest devuelve 404, consultar los tags de Git directamente
+      if (res.status === 404) {
+        const tagsRes = await fetch(`https://api.github.com/repos/${repo}/tags`, { headers });
+        if (tagsRes.ok) {
+          const tags = await tagsRes.json();
+          if (Array.isArray(tags) && tags.length > 0) {
+            const latestTag = tags[0].name.replace(/^v/, '');
+            const hasUpdate = compareVersions(latestTag, currentVer) > 0;
+            return {
+              hasUpdate,
+              currentVersion: currentVer,
+              latestVersion: latestTag,
+              releaseTitle: `Reddit Video Generator v${latestTag}`,
+              releaseNotes: 'Nueva versión disponible en el repositorio de GitHub.',
+              publishedAt: new Date().toISOString(),
+              releaseUrl: `https://github.com/${repo}/releases/tag/v${latestTag}`,
+              assets: []
+            };
+          }
+        }
+      }
+    } catch (ghErr) {
+      console.error('Error al conectar con GitHub directamente:', ghErr);
+    }
+
+    return {
+      hasUpdate: false,
+      currentVersion: currentVer,
+      error: 'No se pudo conectar con los servidores de GitHub para buscar actualizaciones. Verifica tu conexión a internet.'
+    };
+  };
+
   const handleCheckUpdatesManually = async () => {
     setUpdateInfo({ loading: true, currentVersion: '1.0.0' });
     setShowUpdateModal(true);
-    try {
-      const res = await fetch('/api/updates/check');
-      const info = await res.json();
-      if (info) {
-        setUpdateInfo(info);
-      } else {
-        setUpdateInfo({ hasUpdate: false, currentVersion: '1.0.0' });
-      }
-    } catch (e) {
-      setUpdateInfo({ 
-        error: 'No se pudo conectar con los servidores de GitHub para buscar actualizaciones. Verifica tu conexión a internet.', 
-        currentVersion: '1.0.0' 
-      });
-    }
+    const info = await performUpdateCheck();
+    setUpdateInfo(info);
   };
 
   return (
@@ -616,47 +691,6 @@ export default function App() {
           updateInfo={updateInfo}
           onClose={() => setShowUpdateModal(false)}
         />
-      )}
-
-      {/* 5. Modal de Prueba de Actualización Exitosa 1.0.1 */}
-      {showTestUpdateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
-          <div className="relative w-full max-w-md bg-[#0d121f] border border-brand-primary/40 rounded-3xl p-6 shadow-2xl shadow-brand-primary/20 text-center space-y-5 animate-scaleUp">
-            
-            {/* Badge Superior */}
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-primary/20 border border-brand-primary/30 text-brand-primary text-[11px] font-black uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>TEST DE ACTUALIZACIÓN 1.0.1</span>
-            </div>
-
-            {/* Icono Central */}
-            <div className="w-20 h-20 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 shadow-xl shadow-emerald-500/10">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-
-            {/* Mensaje de Confirmación */}
-            <div className="space-y-2">
-              <h3 className="text-xl font-black text-white tracking-wide">
-                ¡ACTUALIZACIÓN EXITOSA!
-              </h3>
-              <p className="text-xs text-gray-300 leading-relaxed max-w-xs mx-auto">
-                Has actualizado correctamente a la versión <strong className="text-emerald-400 font-black">v1.0.1</strong>. Este modal de prueba confirma que el actualizador de GitHub funciona a la perfección.
-              </p>
-            </div>
-
-            {/* Botón de Aceptar / Cerrar */}
-            <div className="pt-2">
-              <button
-                type="button"
-                onClick={() => setShowTestUpdateModal(false)}
-                className="w-full bg-gradient-to-r from-brand-primary to-orange-500 hover:opacity-90 text-white font-extrabold py-3 px-6 rounded-2xl transition-all duration-200 text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-brand-primary/20 active:scale-95 flex items-center justify-center gap-2"
-              >
-                <Zap className="w-4 h-4 fill-current" />
-                <span>CONTINUAR AL ESTUDIO</span>
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </div>
   );
