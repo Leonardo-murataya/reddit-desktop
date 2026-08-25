@@ -60,7 +60,7 @@ function splitTextIntoChunks(text, maxChunkLength = 4000) {
  * @param {object} options - Opciones de velocidad (rate) y tono (pitch)
  * @returns {Promise<Array<{word: string, start: number, end: number, duration: number}>>}
  */
-async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options = {}) {
+async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options = {}, onProgress = () => {}) {
   const { EdgeTTS } = require('@andresaya/edge-tts');
   
   // Auto-corregir erratas comunes de ortografía (ej. 'anos' -> 'años') para que la locución no diga 'anos'
@@ -104,6 +104,15 @@ async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options
         attempts++;
         try {
           console.log(`[TTS] Sintetizando fragmento ${i + 1}/${chunks.length} (${chunk.length} caracteres) - Intento ${attempts}/${maxAttempts}...`);
+          if (typeof onProgress === 'function') {
+            onProgress({ 
+              status: 'synthesizing', 
+              chunkIndex: i + 1, 
+              totalChunks: chunks.length, 
+              charLength: chunk.length,
+              attempt: attempts 
+            });
+          }
           ttsInstance = new EdgeTTS();
           await ttsInstance.synthesize(chunk, voice, synthesisOptions);
           
@@ -140,6 +149,14 @@ async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options
           }
 
           success = true;
+          if (typeof onProgress === 'function') {
+            onProgress({ 
+              status: 'processed', 
+              chunkIndex: i + 1, 
+              totalChunks: chunks.length, 
+              duration: partDuration 
+            });
+          }
         } catch (attemptError) {
           console.warn(`[TTS] Intento ${attempts}/${maxAttempts} de síntesis falló:`, attemptError.message);
           

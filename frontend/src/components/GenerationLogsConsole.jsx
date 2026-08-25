@@ -27,10 +27,17 @@ const PIPELINE_STEPS = [
   { id: 'done', label: '5. Exportado', icon: CheckCircle2, desc: 'Video listo' },
 ];
 
-// Detectar el paso activo actual basado en el texto del log o paso de Express
-const detectActivePipelineStep = (currentStepText = '', isCompleted = false) => {
-  if (isCompleted) return 'done';
-  const text = (currentStepText || '').toLowerCase();
+// Detectar el paso activo actual basado en stage o texto del paso de Express
+const detectActivePipelineStep = (activeJob = null) => {
+  if (!activeJob) return 'script';
+  if (activeJob.stage) {
+    if (activeJob.stage === 'done') return 'done';
+    if (activeJob.stage === 'render') return 'render';
+    if (activeJob.stage === 'subtitles') return 'subtitles';
+    if (activeJob.stage === 'audio') return 'audio';
+    if (activeJob.stage === 'script') return 'script';
+  }
+  const text = (activeJob.currentStep || '').toLowerCase();
   if (text.includes('ffmpeg') || text.includes('render') || text.includes('gpu') || text.includes('ensamblando') || text.includes('codific') || text.includes('compilando')) {
     return 'render';
   }
@@ -40,8 +47,8 @@ const detectActivePipelineStep = (currentStepText = '', isCompleted = false) => 
   if (text.includes('tts') || text.includes('audio') || text.includes('voz') || text.includes('voces') || text.includes('sintetizando') || text.includes('edge')) {
     return 'audio';
   }
-  if (text.includes('ia') || text.includes('guión') || text.includes('guion') || text.includes('historia') || text.includes('prompt') || text.includes('gemini') || text.includes('reddit')) {
-    return 'script';
+  if (text.includes('completado') || text.includes('finalizada') || text.includes('guardado')) {
+    return 'done';
   }
   return 'script';
 };
@@ -236,7 +243,8 @@ export default function GenerationLogsConsole({
     URL.revokeObjectURL(url);
   };
 
-  const currentActiveStepId = detectActivePipelineStep(activeJob?.currentStep, activeJob?.progress === 100);
+  const currentActiveStepId = detectActivePipelineStep(activeJob);
+  const isAllBatchDone = activeJob?.status === 'completed' || activeJob?.status === 'completed_with_errors';
 
   return (
     <div className="glass-panel rounded-3xl flex flex-col overflow-hidden border border-border-dark/80 shadow-2xl transition-all duration-300">
@@ -250,8 +258,8 @@ export default function GenerationLogsConsole({
               const stepIndex = PIPELINE_STEPS.findIndex(s => s.id === step.id);
               const activeIndex = PIPELINE_STEPS.findIndex(s => s.id === currentActiveStepId);
               
-              const isDone = stepIndex < activeIndex || (activeJob.progress === 100);
-              const isCurrent = stepIndex === activeIndex && activeJob.progress !== 100;
+              const isDone = isAllBatchDone || currentActiveStepId === 'done' || stepIndex < activeIndex;
+              const isCurrent = !isAllBatchDone && currentActiveStepId !== 'done' && stepIndex === activeIndex;
 
               return (
                 <React.Fragment key={step.id}>

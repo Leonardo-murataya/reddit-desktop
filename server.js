@@ -1290,6 +1290,10 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           throw new Error(`El perfil asignado para "${template.name}" no tiene API Key configurada.`);
         }
 
+        job.stage = 'script';
+        job.currentStep = 'Generando historia con IA';
+        job.progress = 0;
+
         broadcastProgress({ 
           type: 'status', 
           status: 'processing', 
@@ -1346,9 +1350,27 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         const activeVoice = story.gender === 'male' ? template.maleVoice : template.femaleVoice;
 
         // 2. GENERAR AUDIOS CON EDGE TTS
+        job.stage = 'audio';
+        job.currentStep = 'Sintetizando locución de audio (TTS)';
+
         // Audio A: Título
         broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Sintetizando audio del TÍTULO...` });
-        const titleTimestamps = await tts.generateSpeechAndTimestamps(story.title, activeVoice, titleAudioPath, template);
+        const titleTimestamps = await tts.generateSpeechAndTimestamps(
+          story.title, 
+          activeVoice, 
+          titleAudioPath, 
+          template,
+          (prog) => {
+            if (prog.status === 'synthesizing') {
+              broadcastProgress({
+                type: 'status',
+                status: 'processing',
+                activeJob: job,
+                log: `${videoNumStr} [TTS] Sintetizando audio del título (${prog.chunkIndex}/${prog.totalChunks})...`
+              });
+            }
+          }
+        );
         const titleDuration = timeline.getVideoDuration(titleAudioPath);
 
         if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
@@ -1357,6 +1379,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         let bodyDuration = 0;
 
         if (template.multiVoiceEnabled && story.dialogues && story.dialogues.length > 0) {
+          job.stage = 'audio';
+          job.currentStep = 'Sintetizando diálogos multi-voz';
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Iniciando síntesis de diálogos MULTI-VOZ (${story.dialogues.length} frases)...` });
 
           const roleMap = assignVoicesToRoles(story.dialogues, template, story.gender);
@@ -1377,7 +1401,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
               type: 'status',
               status: 'processing',
               activeJob: job,
-              log: `${videoNumStr} Sintetizando frase ${dIdx + 1}/${story.dialogues.length} (personaje: "${dial.role}", voz: ${shortVoiceName})...`
+              log: `${videoNumStr} [TTS] Sintetizando diálogo ${dIdx + 1}/${story.dialogues.length} (personaje: "${dial.role}", voz: ${shortVoiceName})...`
             });
 
             const partOptions = {
@@ -1385,7 +1409,22 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
               pitch: voiceConf.pitch
             };
 
-            const partTimestamps = await tts.generateSpeechAndTimestamps(dial.text, voiceConf.voice, partAudioPath, partOptions);
+            const partTimestamps = await tts.generateSpeechAndTimestamps(
+              dial.text, 
+              voiceConf.voice, 
+              partAudioPath, 
+              partOptions,
+              (prog) => {
+                if (prog.status === 'synthesizing' && prog.totalChunks > 1) {
+                  broadcastProgress({
+                    type: 'status',
+                    status: 'processing',
+                    activeJob: job,
+                    log: `${videoNumStr} [TTS] Diálogo ${dIdx + 1}: fragmento ${prog.chunkIndex}/${prog.totalChunks}...`
+                  });
+                }
+              }
+            );
             const partDuration = timeline.getVideoDuration(partAudioPath);
 
             const shiftedTimestamps = partTimestamps.map(t => ({
@@ -1404,8 +1443,32 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           tts.concatAudioFiles(dialogueParts, bodyAudioPath);
           bodyDuration = accumulatedDuration;
         } else {
+          job.stage = 'audio';
+          job.currentStep = 'Sintetizando historia de audio (TTS)';
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Sintetizando audio de la HISTORIA...` });
-          bodyTimestamps = await tts.generateSpeechAndTimestamps(story.content || '', activeVoice, bodyAudioPath, template);
+          bodyTimestamps = await tts.generateSpeechAndTimestamps(
+            story.content || '', 
+            activeVoice, 
+            bodyAudioPath, 
+            template,
+            (prog) => {
+              if (prog.status === 'synthesizing') {
+                broadcastProgress({
+                  type: 'status',
+                  status: 'processing',
+                  activeJob: job,
+                  log: `${videoNumStr} [TTS] Sintetizando fragmento ${prog.chunkIndex}/${prog.totalChunks} (${prog.charLength || 0} caracteres)...`
+                });
+              } else if (prog.status === 'processed') {
+                broadcastProgress({
+                  type: 'status',
+                  status: 'processing',
+                  activeJob: job,
+                  log: `${videoNumStr} [TTS] Marcas de tiempo procesadas para fragmento ${prog.chunkIndex}/${prog.totalChunks} (Duración: ${prog.duration ? prog.duration.toFixed(1) : 0}s)`
+                });
+              }
+            }
+          );
           bodyDuration = timeline.getVideoDuration(bodyAudioPath);
         }
 
@@ -1419,6 +1482,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
 
         if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
         // 3. GENERAR EL PNG DE LA TARJETA DE REDDIT
+        job.stage = 'subtitles';
+        job.currentStep = 'Renderizando tarjeta Reddit y subtítulos';
         broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Renderizando Tarjeta de Reddit con Puppeteer...` });
         const cardData = {
           title: story.title,
@@ -1494,6 +1559,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
           // Compilar 9:16
           const finalVideoPath916 = path.join(exportFolder, `video ${job.currentVideoIndex} 9-16 ${safeTitle}.mp4`);
+          job.stage = 'render';
+          job.currentStep = 'Codificando formato 9:16 con FFmpeg';
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Compilando formato 9:16 vertical (Archivo: video ${job.currentVideoIndex} 9-16 ${safeTitle}.mp4)...` });
           let lastLogged916 = -1;
           await ffmpeg.compileVideo({
@@ -1529,8 +1596,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             watermarkImageOffsetY: template.watermarkImageOffsetY !== undefined ? template.watermarkImageOffsetY : 20
           }, (percent) => {
             job.progress = Math.round(percent * 0.5);
-            const isMilestone = (percent > 0 && percent % 10 === 0) || percent === 100;
-            const shouldLog = isMilestone && percent !== lastLogged916;
+            const shouldLog = (percent > 0 && percent !== lastLogged916);
             if (shouldLog) {
               lastLogged916 = percent;
             }
@@ -1544,6 +1610,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
 
           // Compilar 16:9
           const finalVideoPath169 = path.join(exportFolder, `video ${job.currentVideoIndex} 16-9 ${safeTitle}.mp4`);
+          job.stage = 'render';
+          job.currentStep = 'Codificando formato 16:9 con FFmpeg';
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Compilando formato 16:9 horizontal (Archivo: video ${job.currentVideoIndex} 16-9 ${safeTitle}.mp4)...` });
           let lastLogged169 = -1;
           await ffmpeg.compileVideo({
@@ -1579,8 +1647,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             watermarkImageOffsetY: template.watermarkImageOffsetY !== undefined ? template.watermarkImageOffsetY : 20
           }, (percent) => {
             job.progress = 50 + Math.round(percent * 0.5);
-            const isMilestone = (percent > 0 && percent % 10 === 0) || percent === 100;
-            const shouldLog = isMilestone && percent !== lastLogged169;
+            const shouldLog = (percent > 0 && percent !== lastLogged169);
             if (shouldLog) {
               lastLogged169 = percent;
             }
@@ -1606,6 +1673,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             hashtags: finalHashtags
           });
 
+          job.stage = 'done';
+          job.currentStep = 'Videos completados y guardados';
           broadcastProgress({ 
             type: 'status', 
             status: 'processing', 
@@ -1641,6 +1710,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           if (cancelRequested) throw new Error('La generación fue cancelada por solicitud del usuario.');
           const videoName = isLandscape ? `video ${job.currentVideoIndex} 16-9 ${safeTitle}` : `video ${job.currentVideoIndex} 9-16 ${safeTitle}`;
           const finalVideoPath = path.join(exportFolder, `${videoName}.mp4`);
+          job.stage = 'render';
+          job.currentStep = 'Codificando video con FFmpeg';
           broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Iniciando codificación FFmpeg (Archivo: ${videoName}.mp4)...` });
 
           let lastLoggedPercent = -1;
@@ -1680,8 +1751,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             watermarkImageOffsetY: template.watermarkImageOffsetY !== undefined ? template.watermarkImageOffsetY : 20
           }, (percent) => {
             job.progress = percent;
-            const isMilestone = (percent > 0 && percent % 10 === 0) || percent === 100;
-            const shouldLog = isMilestone && percent !== lastLoggedPercent;
+            const shouldLog = (percent > 0 && percent !== lastLoggedPercent);
             if (shouldLog) {
               lastLoggedPercent = percent;
             }
@@ -1708,6 +1778,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             hashtags: finalHashtags
           });
 
+          job.stage = 'done';
+          job.currentStep = 'Video completado y guardado';
           broadcastProgress({ 
             type: 'status', 
             status: 'processing', 
