@@ -609,8 +609,8 @@ export default function App() {
         />
       )}
 
-      {/* 4. Modal Emergente de Actualizaciones */}
-      {showUpdateModal && updateInfo && updateInfo.hasUpdate && (
+      {/* 4. Modal Emergente de Actualizaciones (Personalizado para todos los estados) */}
+      {showUpdateModal && updateInfo && (
         <UpdateModal
           updateInfo={updateInfo}
           onClose={() => setShowUpdateModal(false)}

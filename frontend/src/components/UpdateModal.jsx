@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Download, Clock, ExternalLink, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck, GitBranch } from 'lucide-react';
+import { Sparkles, Download, Clock, ExternalLink, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
 
 export default function UpdateModal({ updateInfo, onClose }) {
   if (!updateInfo) return null;
@@ -165,11 +165,6 @@ export default function UpdateModal({ updateInfo, onClose }) {
                 <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto leading-relaxed">
                   Estás disfrutando de la versión más reciente. Tu suite de escritorio cuenta con todas las optimizaciones de renderizado GPU y funciones activas.
                 </p>
-              </div>
-
-              <div className="p-3 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-center gap-2 text-xs text-gray-400">
-                <GitBranch size={14} className="text-gray-300" />
-                <span>Repositorio oficial sincronizado: <strong className="text-gray-200 font-bold">Leonardo-murataya/reddit-desktop</strong></span>
               </div>
             </div>
           )}
