@@ -430,6 +430,23 @@ export default function App() {
     }
   };
 
+  const handleCheckUpdatesManually = async () => {
+    try {
+      const res = await fetch('/api/updates/check');
+      const info = await res.json();
+      if (info && info.hasUpdate) {
+        setUpdateInfo(info);
+        setShowUpdateModal(true);
+      } else if (info && info.error) {
+        alert(info.error);
+      } else {
+        alert(info?.message || `¡Tu versión (v${info?.currentVersion || '1.0.1'}) está completamente actualizada!`);
+      }
+    } catch (e) {
+      alert('Error al comprobar actualizaciones: ' + e.message);
+    }
+  };
+
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#07090e] text-gray-100 select-none">
       
@@ -447,6 +464,16 @@ export default function App() {
 
         {/* Indicadores de Estado Globales */}
         <div className="flex items-center gap-3">
+          {/* Botón rápido de Buscar Actualizaciones */}
+          <button
+            type="button"
+            onClick={() => handleCheckUpdatesManually()}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-white border border-purple-500/20 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
+            title="Comprobar si hay nuevas versiones en GitHub"
+          >
+            <span>Buscar Actualizaciones</span>
+          </button>
+
           {/* Badge de Job Activo en Header si existe */}
           {activeJob && (
             <div 
@@ -464,12 +491,12 @@ export default function App() {
             <span className="truncate max-w-[160px]">{gpuInfo?.gpuName || 'GPU Hardware'}</span>
           </div>
 
-          {/* Botón de Actualizaciones */}
+          {/* Botón de Integraciones */}
           <button
             type="button"
             onClick={() => setActiveTab('integrations')}
             className="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-white/5 active:scale-95"
-            title="Integraciones y Actualizaciones"
+            title="Integraciones y Notificaciones"
           >
             <Bell className="w-3.5 h-3.5" />
           </button>
@@ -485,6 +512,7 @@ export default function App() {
           gpuInfo={gpuInfo}
           isCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+          onCheckUpdate={handleCheckUpdatesManually}
         />
 
         {/* Área de Trabajo Principal (Nunca se corta horizontalmente) */}
