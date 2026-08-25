@@ -431,19 +431,21 @@ export default function App() {
   };
 
   const handleCheckUpdatesManually = async () => {
+    setUpdateInfo({ loading: true, currentVersion: '1.0.0' });
+    setShowUpdateModal(true);
     try {
       const res = await fetch('/api/updates/check');
       const info = await res.json();
-      if (info && info.hasUpdate) {
+      if (info) {
         setUpdateInfo(info);
-        setShowUpdateModal(true);
-      } else if (info && info.error) {
-        alert(info.error);
       } else {
-        alert(info?.message || `¡Tu versión (v${info?.currentVersion || '1.0.1'}) está completamente actualizada!`);
+        setUpdateInfo({ hasUpdate: false, currentVersion: '1.0.0' });
       }
     } catch (e) {
-      alert('Error al comprobar actualizaciones: ' + e.message);
+      setUpdateInfo({ 
+        error: 'No se pudo conectar con los servidores de GitHub para buscar actualizaciones. Verifica tu conexión a internet.', 
+        currentVersion: '1.0.0' 
+      });
     }
   };
 
