@@ -1,6 +1,6 @@
 {
   "name": "reddit-desktop",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "description": "Reddit Video Generator Desktop Application",
   "main": "server.js",
   "scripts": {
