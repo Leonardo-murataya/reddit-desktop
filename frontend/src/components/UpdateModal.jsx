@@ -20,16 +20,30 @@ export default function UpdateModal({ updateInfo, onClose }) {
     setDownloadError('');
 
     try {
-      const url = asset.apiUrl || asset.downloadUrl;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/octet-stream'
+      let res;
+      // 1. Intentar descargar a través de la ruta backend local (streaming sin problemas de CORS)
+      if (asset.id) {
+        try {
+          const localUrl = `/api/updates/download-asset?assetId=${asset.id}&filename=${encodeURIComponent(asset.name || 'Reddit_Setup.exe')}`;
+          res = await fetch(localUrl);
+        } catch (e) {
+          console.warn('Backend local no disponible para streaming, intentando directo...', e);
         }
-      });
+      }
+
+      // 2. Si el backend no respondió ok, intentar consulta con token directo
+      if (!res || !res.ok) {
+        const url = asset.apiUrl || asset.downloadUrl;
+        res = await fetch(url, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/octet-stream'
+          }
+        });
+      }
 
       if (!res.ok) {
-        throw new Error(`Error ${res.status}: No se pudo descargar el archivo de GitHub.`);
+        throw new Error(`Error ${res.status}: No se pudo descargar el instalador.`);
       }
 
       const contentLength = res.headers.get('content-length');

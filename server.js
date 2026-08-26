@@ -607,6 +607,46 @@ app.post('/api/updater/check', handleCheckUpdates);
 app.get('/api/updates/check', handleCheckUpdates);
 app.post('/api/updates/check', handleCheckUpdates);
 
+// Endpoint de descarga directa para repositorios privados (sin problemas de CORS en navegador)
+app.get('/api/updates/download-asset', async (req, res) => {
+  try {
+    const { assetId, filename } = req.query;
+    const settings = db.readDb().settings || {};
+    const repo = settings.githubRepo || 'Leonardo-murataya/reddit-desktop';
+    const token = settings.githubToken || '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';
+
+    if (!assetId) {
+      return res.status(400).json({ error: 'assetId es requerido' });
+    }
+
+    const assetUrl = `https://api.github.com/repos/${repo}/releases/assets/${assetId}`;
+    const ghRes = await fetch(assetUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Accept': 'application/octet-stream',
+        'User-Agent': 'Reddit-Desktop-Updater'
+      },
+      redirect: 'follow'
+    });
+
+    if (!ghRes.ok) {
+      return res.status(ghRes.status).json({ error: `Error ${ghRes.status} al descargar de GitHub` });
+    }
+
+    const safeFilename = filename || 'Reddit_Video_Generator_Setup.exe';
+    res.setHeader('Content-Disposition', `attachment; filename="${safeFilename}"`);
+    res.setHeader('Content-Type', 'application/octet-stream');
+    const cl = ghRes.headers.get('content-length');
+    if (cl) res.setHeader('Content-Length', cl);
+
+    const { Readable } = require('stream');
+    Readable.fromWeb(ghRes.body).pipe(res);
+  } catch (error) {
+    console.error('Error al descargar asset:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 // 3. Perfiles de API de IA
 app.get('/api/profiles', (req, res) => {
