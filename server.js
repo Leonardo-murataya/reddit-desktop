@@ -588,9 +588,12 @@ const handleCheckUpdates = async (req, res) => {
       releaseNotes: release.body || 'Sin notas de versión disponibles.',
       publishedAt: release.published_at,
       releaseUrl: release.html_url,
+      githubToken: token,
       assets: (release.assets || []).map(a => ({
+        id: a.id,
         name: a.name,
         size: a.size,
+        apiUrl: a.url,
         downloadUrl: a.browser_download_url
       }))
     });

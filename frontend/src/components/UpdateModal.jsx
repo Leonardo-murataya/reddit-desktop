@@ -1,24 +1,76 @@
-import React from 'react';
-import { Sparkles, Download, Clock, ExternalLink, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { Sparkles, Download, Clock, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck, Zap, Check } from 'lucide-react';
 
 export default function UpdateModal({ updateInfo, onClose }) {
+  const [downloadingAsset, setDownloadingAsset] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+
   if (!updateInfo) return null;
 
-  const handleOpenRelease = () => {
-    if (updateInfo.releaseUrl) {
-      window.open(updateInfo.releaseUrl, '_blank');
-    } else {
-      window.open('https://github.com/Leonardo-murataya/reddit-desktop/releases', '_blank');
-    }
-  };
+  const defaultToken = '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';
+  const token = updateInfo.githubToken || defaultToken;
 
-  const handleDownloadAsset = (url) => {
-    if (url) {
-      window.open(url, '_blank');
+  const handleDownloadAsset = async (asset) => {
+    if (!asset) return;
+    setDownloadingAsset(asset.name);
+    setDownloadProgress(0);
+    setDownloadSuccess(false);
+    setDownloadError('');
+
+    try {
+      const url = asset.apiUrl || asset.downloadUrl;
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/octet-stream'
+        }
+      });
+
+      if (!res.ok) {
+        throw new Error(`Error ${res.status}: No se pudo descargar el archivo de GitHub.`);
+      }
+
+      const contentLength = res.headers.get('content-length');
+      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+      const reader = res.body.getReader();
+      let receivedBytes = 0;
+      const chunks = [];
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        receivedBytes += value.length;
+        if (totalBytes > 0) {
+          const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
+          setDownloadProgress(percent);
+        }
+      }
+
+      const blob = new Blob(chunks, { type: 'application/octet-stream' });
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = asset.name || 'Reddit_Video_Generator_Setup.exe';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+
+      setDownloadSuccess(true);
+      setDownloadingAsset(null);
+    } catch (err) {
+      console.error('Error durante la descarga:', err);
+      setDownloadError(err.message || 'Error al descargar el archivo.');
+      setDownloadingAsset(null);
     }
   };
 
   const isUpToDate = !updateInfo.hasUpdate && !updateInfo.error && !updateInfo.loading;
+  const primaryAsset = updateInfo.assets && updateInfo.assets.length > 0 ? updateInfo.assets[0] : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
@@ -114,18 +166,53 @@ export default function UpdateModal({ updateInfo, onClose }) {
                 <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-2">
                   Novedades de la actualización:
                 </h4>
-                <div className="bg-black/40 border border-white/10 rounded-2xl p-4 text-xs text-gray-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto custom-scrollbar font-medium">
+                <div className="bg-black/40 border border-white/10 rounded-2xl p-4 text-xs text-gray-300 whitespace-pre-line leading-relaxed max-h-40 overflow-y-auto custom-scrollbar font-medium">
                   {updateInfo.releaseNotes || 'Mejoras de rendimiento, corrección de errores y nuevas funciones.'}
                 </div>
               </div>
+
+              {/* Barra de Progreso de Descarga en Vivo */}
+              {downloadingAsset && (
+                <div className="p-4 bg-purple-950/40 border border-purple-500/40 rounded-2xl space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between text-xs font-bold text-purple-200">
+                    <span className="flex items-center gap-2">
+                      <Loader2 size={14} className="animate-spin text-purple-400" />
+                      Descargando instalador...
+                    </span>
+                    <span className="font-mono text-purple-300">{downloadProgress}%</span>
+                  </div>
+                  <div className="w-full bg-black/60 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full transition-all duration-200 rounded-full"
+                      style={{ width: `${downloadProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Mensaje de Éxito al descargar */}
+              {downloadSuccess && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-300 text-xs flex items-center gap-2.5 animate-fadeIn font-bold">
+                  <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
+                  <span>¡Instalador descargado con éxito! Ábrelo desde tu carpeta de Descargas para actualizar.</span>
+                </div>
+              )}
+
+              {/* Mensaje de Error en descarga */}
+              {downloadError && (
+                <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs flex items-center gap-2.5 animate-fadeIn">
+                  <AlertTriangle size={18} className="shrink-0 text-rose-400" />
+                  <span>{downloadError}</span>
+                </div>
+              )}
 
               {/* Archivos descargables si están disponibles */}
               {updateInfo.assets && updateInfo.assets.length > 0 && (
                 <div>
                   <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-2">
-                    Descarga Directa de Instalador:
+                    Archivo Instalador Disponible:
                   </h4>
-                  <div className="space-y-2 max-h-36 overflow-y-auto custom-scrollbar">
+                  <div className="space-y-2">
                     {updateInfo.assets.map((asset, idx) => (
                       <div
                         key={idx}
@@ -138,11 +225,27 @@ export default function UpdateModal({ updateInfo, onClose }) {
                           </span>
                         </div>
                         <button
-                          onClick={() => handleDownloadAsset(asset.downloadUrl)}
-                          className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm shadow-purple-600/30"
+                          type="button"
+                          disabled={!!downloadingAsset}
+                          onClick={() => handleDownloadAsset(asset)}
+                          className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm shadow-purple-600/30 active:scale-95"
                         >
-                          <Download size={13} />
-                          <span>Descargar</span>
+                          {downloadingAsset === asset.name ? (
+                            <>
+                              <Loader2 size={13} className="animate-spin" />
+                              <span>{downloadProgress}%</span>
+                            </>
+                          ) : downloadSuccess ? (
+                            <>
+                              <Check size={13} />
+                              <span>Descargado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Download size={13} />
+                              <span>Descargar</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     ))}
@@ -188,25 +291,43 @@ export default function UpdateModal({ updateInfo, onClose }) {
           {updateInfo.hasUpdate ? (
             <>
               <button
+                type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer border border-white/5"
+                className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer border border-white/5 active:scale-95"
               >
                 <Clock size={14} />
                 <span>Recordar después</span>
               </button>
               
               <button
-                onClick={handleOpenRelease}
-                className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer active:scale-95"
+                type="button"
+                disabled={!!downloadingAsset || !primaryAsset}
+                onClick={() => handleDownloadAsset(primaryAsset)}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer active:scale-95"
               >
-                <ExternalLink size={14} />
-                <span>Ver en GitHub</span>
+                {downloadingAsset ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>Descargando ({downloadProgress}%)...</span>
+                  </>
+                ) : downloadSuccess ? (
+                  <>
+                    <Check size={14} />
+                    <span>¡Descargado con Éxito!</span>
+                  </>
+                ) : (
+                  <>
+                    <Zap size={14} className="fill-current" />
+                    <span>Descargar e Instalar v{updateInfo.latestVersion}</span>
+                  </>
+                )}
               </button>
             </>
           ) : (
             <button
+              type="button"
               onClick={onClose}
-              className="w-full px-4 py-2.5 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer border border-white/10"
+              className="w-full px-4 py-3 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer border border-white/10 active:scale-95"
             >
               <span>Aceptar</span>
             </button>
