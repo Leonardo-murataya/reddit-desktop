@@ -28,6 +28,7 @@ export default function App() {
   // Estado de Actualizaciones
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
+  const [showTestUpdateModal, setShowTestUpdateModal] = useState(true);
 
   // Estado global del job activo (SSE al nivel de App para no perder eventos al cambiar de tab)
   const [activeJob, setActiveJob] = useState(null);
@@ -428,7 +429,7 @@ export default function App() {
   };
 
   const performUpdateCheck = async (customSettings = null) => {
-    const currentVer = '1.0.0';
+    const currentVer = '1.0.1';
     
     // 1. Intentar consultar a través del backend local
     try {
@@ -691,6 +692,47 @@ export default function App() {
           updateInfo={updateInfo}
           onClose={() => setShowUpdateModal(false)}
         />
+      )}
+
+      {/* 5. Modal de Prueba de Actualización Exitosa 1.0.1 */}
+      {showTestUpdateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="relative w-full max-w-md bg-[#0d121f] border border-brand-primary/40 rounded-3xl p-6 shadow-2xl shadow-brand-primary/20 text-center space-y-5 animate-scaleUp">
+            
+            {/* Badge Superior */}
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-brand-primary/20 border border-brand-primary/30 text-brand-primary text-[11px] font-black uppercase tracking-wider">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>TEST DE ACTUALIZACIÓN 1.0.1</span>
+            </div>
+
+            {/* Icono Central */}
+            <div className="w-20 h-20 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 shadow-xl shadow-emerald-500/10">
+              <CheckCircle2 className="w-10 h-10" />
+            </div>
+
+            {/* Mensaje de Confirmación */}
+            <div className="space-y-2">
+              <h3 className="text-xl font-black text-white tracking-wide">
+                ¡ACTUALIZACIÓN EXITOSA!
+              </h3>
+              <p className="text-xs text-gray-300 leading-relaxed max-w-xs mx-auto">
+                Has actualizado correctamente a la versión <strong className="text-emerald-400 font-black">v1.0.1</strong>. Este modal de prueba confirma que el actualizador de GitHub funciona a la perfección.
+              </p>
+            </div>
+
+            {/* Botón de Aceptar / Cerrar */}
+            <div className="pt-2">
+              <button
+                type="button"
+                onClick={() => setShowTestUpdateModal(false)}
+                className="w-full bg-gradient-to-r from-brand-primary to-orange-500 hover:opacity-90 text-white font-extrabold py-3 px-6 rounded-2xl transition-all duration-200 text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-brand-primary/20 active:scale-95 flex items-center justify-center gap-2"
+              >
+                <Zap className="w-4 h-4 fill-current" />
+                <span>CONTINUAR AL ESTUDIO</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
