@@ -103,6 +103,13 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     );
     if (ok) {
       await onDelete(selectedId);
+      const remaining = (profiles || []).filter(p => p.id !== selectedId);
+      if (remaining.length > 0) {
+        loadedProfileIdRef.current = remaining[0].id;
+        setSelectedId(remaining[0].id);
+      } else {
+        handleCreateNew();
+      }
       showToast('Perfil de IA eliminado exitosamente.', 'success');
     }
   };
@@ -171,7 +178,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
               <select
                 value={selectedId}
                 onChange={(e) => setSelectedId(e.target.value)}
-                className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-brand-primary"
+                className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-brand-primary font-bold"
               >
                 {selectedId === 'new' && (
                   <option value="new">Nuevo Perfil (Creando...)</option>
@@ -438,7 +445,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
 
             {/* Acciones */}
             <div className="flex gap-4 border-t border-border-dark pt-6 justify-end">
-              {profiles.length > 1 && selectedId && selectedId !== 'new' && (
+              {selectedId && selectedId !== 'new' && (
                 <button
                   type="button"
                   onClick={handleDeleteClick}

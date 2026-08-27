@@ -199,7 +199,7 @@ async function sendNotification(messageOrOptions) {
           `• *Tiempo transcurrido:* ${durationStr || '0s'} ⏱️`;
       }
 
-      // 2. Construir payload elegante de Discord con Rich Embeds
+      // 2. Construir payload elegante de Discord con Rich Embeds (sanitizando campos para la API de Discord)
       const embedColor = status === 'completed' ? 3066993 // Verde
         : status === 'completed_with_errors' ? 15105570 // Naranja/Amarillo
         : status === 'cancelled' ? 10070709 // Gris
@@ -209,7 +209,7 @@ async function sendNotification(messageOrOptions) {
       const embedTitle = status === 'completed' ? '🎉 ¡LOTE COMPLETADO CON ÉXITO!'
         : status === 'completed_with_errors' ? '⚠️ LOTE FINALIZADO CON DETALLES'
         : status === 'cancelled' ? '🛑 GENERACIÓN DETENIDA'
-        : status === 'video_completed' ? `📹 ¡VIDEO GENERADO! (${messageOrOptions.index}/${messageOrOptions.totalCount})`
+        : status === 'video_completed' ? `📹 ¡VIDEO GENERADO! (${messageOrOptions.index || 1}/${messageOrOptions.totalCount || 1})`
         : '💥 ERROR CRÍTICO EN EL LOTE';
 
       const embedDesc = status === 'completed' ? 'El generador de videos ha finalizado la cola de renderizado sin fallas.'
@@ -218,29 +218,43 @@ async function sendNotification(messageOrOptions) {
         : status === 'video_completed' ? 'Se ha terminado de compilar exitosamente un video.'
         : 'El renderizado se interrumpió debido a un error inesperado.';
 
-      const fields = [];
+      const rawFields = [];
       if (status === 'completed' || status === 'completed_with_errors') {
-        fields.push({ name: '⏱️ Tiempo Total', value: durationStr || 'N/A', inline: true });
+        rawFields.push({ name: '⏱️ Tiempo Total', value: durationStr || 'N/A', inline: true });
         if (status === 'completed') {
-          fields.push({ name: '📹 Videos Generados', value: `${successCount} de ${totalCount} ✅`, inline: true });
+          rawFields.push({ name: '📹 Videos Generados', value: `${successCount || 0} de ${totalCount || 0} ✅`, inline: true });
         } else {
-          fields.push({ name: '📹 Videos Exitosos', value: `${successCount} de ${totalCount} ✅`, inline: true });
-          fields.push({ name: '❌ Videos Fallados', value: `${failedCount} ❌`, inline: true });
+          rawFields.push({ name: '📹 Videos Exitosos', value: `${successCount || 0} de ${totalCount || 0} ✅`, inline: true });
+          rawFields.push({ name: '❌ Videos Fallados', value: `${failedCount || 0} ❌`, inline: true });
         }
-        fields.push({ name: '👤 Perfil de API', value: profileList || 'Por defecto', inline: true });
-        fields.push({ name: '🎨 Plantilla(s)', value: templateList || 'Por defecto', inline: true });
-        fields.push({ name: '📁 Carpeta de Salida', value: exportFolder ? `\`${exportFolder}\`` : 'N/A', inline: false });
+        rawFields.push({ name: '👤 Perfil de API', value: profileList || 'Por defecto', inline: true });
+        rawFields.push({ name: '🎨 Plantilla(s)', value: templateList || 'Por defecto', inline: true });
+        if (exportFolder) {
+          rawFields.push({ name: '📁 Carpeta de Salida', value: `\`${exportFolder}\``, inline: false });
+        }
       } else if (status === 'video_completed') {
-        fields.push({ name: '🎬 Título', value: messageOrOptions.title || 'N/A', inline: false });
-        fields.push({ name: '⏱️ Duración del Video', value: durationStr || 'N/A', inline: true });
-        fields.push({ name: '📁 Archivo de Salida', value: messageOrOptions.filePath ? `\`${messageOrOptions.filePath}\`` : 'N/A', inline: false });
+        rawFields.push({ name: '🎬 Título', value: messageOrOptions.title || 'Video Generado', inline: false });
+        rawFields.push({ name: '⏱️ Duración del Video', value: durationStr || 'N/A', inline: true });
+        if (messageOrOptions.filePath) {
+          rawFields.push({ name: '📁 Archivo de Salida', value: `\`${messageOrOptions.filePath}\``, inline: false });
+        }
       } else {
-        fields.push({ name: '⏱️ Tiempo Transcurrido', value: durationStr || 'N/A', inline: true });
-        fields.push({ name: '📹 Videos Procesados', value: `${successCount || 0} de ${totalCount || 0}`, inline: true });
+        rawFields.push({ name: '⏱️ Tiempo Transcurrido', value: durationStr || 'N/A', inline: true });
+        rawFields.push({ name: '📹 Videos Procesados', value: `${successCount || 0} de ${totalCount || 0}`, inline: true });
         if (errorMsg) {
-          fields.push({ name: '❌ Mensaje de Error', value: `\`\`\`${errorMsg}\`\`\``, inline: false });
+          const cleanErr = String(errorMsg).substring(0, 950);
+          rawFields.push({ name: '❌ Mensaje de Error', value: `\`\`\`${cleanErr}\`\`\``, inline: false });
         }
       }
+
+      // Sanitizar campos: Discord rechaza campos vacíos o con valores superiores a 1024 caracteres
+      const safeFields = rawFields
+        .filter(f => f && f.name && String(f.name).trim() && f.value && String(f.value).trim())
+        .map(f => ({
+          name: String(f.name).substring(0, 250),
+          value: String(f.value).substring(0, 1000),
+          inline: Boolean(f.inline)
+        }));
 
       discordPayload = {
         embeds: [
@@ -248,7 +262,7 @@ async function sendNotification(messageOrOptions) {
             title: embedTitle,
             description: embedDesc,
             color: embedColor,
-            fields: fields,
+            fields: safeFields,
             footer: {
               text: 'REDIT-GEN • Sistema de Notificaciones'
             },
@@ -266,17 +280,15 @@ async function sendNotification(messageOrOptions) {
     // Enviar a Discord
     if (settings.discordEnabled && settings.discordWebhookUrl) {
       const webhookUrl = settings.discordWebhookUrl.trim();
-      if (webhookUrl) {
+      if (webhookUrl && (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://'))) {
         try {
-          new URL(webhookUrl);
           await fetch(webhookUrl, {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/json',
-              'User-Agent': 'REDIT-GEN/1.0'
+              'Content-Type': 'application/json'
             },
             body: JSON.stringify(discordPayload),
-            signal: AbortSignal.timeout(6000)
+            signal: AbortSignal.timeout(10000)
           });
         } catch (dErr) {
           console.error('[Notification] Discord Error:', dErr.message);
@@ -390,7 +402,12 @@ app.get('/api/settings', (req, res) => {
 app.post('/api/settings', (req, res) => {
   try {
     const currentDb = db.readDb();
-    currentDb.settings = { ...currentDb.settings, ...req.body };
+    const incoming = { ...req.body };
+    delete incoming.success;
+    delete incoming.settings;
+    currentDb.settings = { ...(currentDb.settings || {}), ...incoming };
+    delete currentDb.settings.success;
+    delete currentDb.settings.settings;
     db.writeDb(currentDb);
     res.json({ success: true, settings: currentDb.settings });
   } catch (error) {
@@ -416,12 +433,13 @@ app.post('/api/notifications/test', async (req, res) => {
       if (webhookUrl) {
         promises.push((async () => {
           try {
-            new URL(webhookUrl);
+            if (!webhookUrl.startsWith('http://') && !webhookUrl.startsWith('https://')) {
+              throw new Error('La URL del Webhook debe comenzar con https://');
+            }
             const response = await fetch(webhookUrl, {
               method: 'POST',
               headers: {
-                'Content-Type': 'application/json',
-                'User-Agent': 'REDIT-GEN/1.0'
+                'Content-Type': 'application/json'
               },
               body: JSON.stringify({
                 embeds: [
@@ -429,20 +447,26 @@ app.post('/api/notifications/test', async (req, res) => {
                     title: '🔔 [REDIT-GEN] ¡Prueba de Integración!',
                     description: 'Tus notificaciones de Discord están configuradas correctamente.',
                     color: 3066993, // Verde
+                    footer: { text: 'REDIT-GEN • Notificaciones' },
                     timestamp: new Date().toISOString()
                   }
                 ]
               }),
-              signal: AbortSignal.timeout(6000)
+              signal: AbortSignal.timeout(10000)
             });
             if (response.ok) {
               return { service: 'Discord', success: true };
             } else {
-              let errDetail = response.status;
-              try {
-                const parsed = await response.json();
-                errDetail = parsed.message || errDetail;
-              } catch(e) {}
+              let errDetail = `Error ${response.status}`;
+              if (response.status === 404) {
+                errDetail = 'Webhook no encontrado (404). Verifica si fue eliminado en Discord.';
+              } else if (response.status === 401) {
+                errDetail = 'Token del Webhook no autorizado (401).';
+              } else if (response.status === 400) {
+                errDetail = 'Formato de datos no admitido (400).';
+              } else if (response.status === 429) {
+                errDetail = 'Límite de envíos excedido en Discord (429 Rate Limit).';
+              }
               throw new Error(`Discord: ${errDetail}`);
             }
           } catch (dErr) {
@@ -943,10 +967,12 @@ app.post('/api/background-videos', handleBackgroundScan);
 app.get('/api/background/status', handleBackgroundScan);
 app.post('/api/background/status', handleBackgroundScan);
 
-// 5b. Diálogos Nativos de Windows vía PowerShell
+// 5b. Diálogos Nativos de Windows
 app.get('/api/dialog/folder', (req, res) => {
   try {
-    const selectedPath = dialogs.selectLocalFolder();
+    const title = req.query.title || 'Selecciona una carpeta';
+    const initialPath = req.query.initialPath || '';
+    const selectedPath = dialogs.selectLocalFolder(title, initialPath);
     res.json({ path: selectedPath });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -955,8 +981,42 @@ app.get('/api/dialog/folder', (req, res) => {
 
 app.get('/api/dialog/files', (req, res) => {
   try {
-    const selectedFiles = dialogs.selectLocalFiles();
+    const title = req.query.title || 'Selecciona tus videos de fondo';
+    const initialPath = req.query.initialPath || '';
+    const selectedFiles = dialogs.selectLocalFiles(title, initialPath);
     res.json({ files: selectedFiles });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/dialog/save', (req, res) => {
+  try {
+    const defaultName = req.query.defaultName || 'plantilla_template.json';
+    const title = req.query.title || 'Guardar Plantilla de Video';
+    const selectedPath = dialogs.selectSaveLocation(defaultName, title);
+    res.json({ path: selectedPath });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/dialog/save-template', (req, res) => {
+  try {
+    const { templatePackage, defaultName, title } = req.body;
+    if (!templatePackage) {
+      return res.status(400).json({ error: 'Datos de la plantilla requeridos' });
+    }
+    const safeName = defaultName || 'plantilla_template.json';
+    const dialogTitle = title || 'Guardar Plantilla de Video';
+    const chosenPath = dialogs.selectSaveLocation(safeName, dialogTitle);
+    
+    if (!chosenPath) {
+      return res.json({ success: false, cancelled: true });
+    }
+
+    fs.writeFileSync(chosenPath, JSON.stringify(templatePackage, null, 2), 'utf8');
+    res.json({ success: true, path: chosenPath });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -964,7 +1024,7 @@ app.get('/api/dialog/files', (req, res) => {
 
 app.get('/api/dialog/avatar', (req, res) => {
   try {
-    const imgData = dialogs.selectLocalImage();
+    const imgData = dialogs.selectLocalImage('Selecciona la foto de perfil');
     res.json(imgData || { path: '', base64: '' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -973,7 +1033,7 @@ app.get('/api/dialog/avatar', (req, res) => {
 
 app.get('/api/dialog/watermark-image', (req, res) => {
   try {
-    const imgData = dialogs.selectLocalImage();
+    const imgData = dialogs.selectLocalImage('Selecciona la imagen de marca de agua');
     res.json(imgData || { path: '', base64: '' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -982,7 +1042,7 @@ app.get('/api/dialog/watermark-image', (req, res) => {
 
 app.get('/api/dialog/music', (req, res) => {
   try {
-    const selectedFile = dialogs.selectLocalAudio();
+    const selectedFile = dialogs.selectLocalAudio('Selecciona tu música de fondo');
     res.json({ path: selectedFile });
   } catch (error) {
     res.status(500).json({ error: error.message });

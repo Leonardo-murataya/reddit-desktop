@@ -158,9 +158,10 @@ export default function App() {
         body: JSON.stringify(newSettings)
       });
       const data = await res.json();
-      setSettings(data || newSettings);
-      refreshBackgroundVideos(data?.backgroundFolder || newSettings.backgroundFolder);
-      return { success: true };
+      const resolvedSettings = data.settings || data || newSettings;
+      setSettings(resolvedSettings);
+      refreshBackgroundVideos(resolvedSettings.backgroundFolder || newSettings.backgroundFolder);
+      return { success: true, settings: resolvedSettings };
     } catch (err) {
       console.error(err);
       return { success: false, error: err.message };

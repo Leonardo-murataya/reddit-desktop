@@ -29,13 +29,14 @@ export default function IntegrationsPanel({ settings, onSave }) {
   const [testResult, setTestResult] = useState('');
 
   useEffect(() => {
-    if (settings) {
-      setDiscordEnabled(settings.discordEnabled ?? false);
-      setDiscordWebhookUrl(settings.discordWebhookUrl || '');
-      setWhatsappEnabled(settings.whatsappEnabled ?? false);
-      setWhatsappApiKey(settings.whatsappApiKey || '');
+    const s = settings?.settings || settings;
+    if (s) {
+      setDiscordEnabled(s.discordEnabled ?? false);
+      setDiscordWebhookUrl(s.discordWebhookUrl || '');
+      setWhatsappEnabled(s.whatsappEnabled ?? false);
+      setWhatsappApiKey(s.whatsappApiKey || '');
       
-      const fullPhone = settings.whatsappPhone || '';
+      const fullPhone = s.whatsappPhone || '';
       const prefixes = ['521', '52', '34', '57', '549', '56', '51', '593', '58', '1'];
       let foundPrefix = '521';
       let foundLocal = fullPhone;
@@ -62,13 +63,14 @@ export default function IntegrationsPanel({ settings, onSave }) {
     setSuccess('');
     setError('');
     
+    const baseSettings = settings?.settings || settings || {};
     onSave({
-      ...settings,
+      ...baseSettings,
       discordEnabled,
-      discordWebhookUrl,
+      discordWebhookUrl: discordWebhookUrl.trim(),
       whatsappEnabled,
       whatsappPhone: getFullWhatsappPhone(),
-      whatsappApiKey
+      whatsappApiKey: whatsappApiKey.trim()
     });
     
     setSuccess('Configuración de integraciones guardada exitosamente.');

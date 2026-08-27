@@ -556,8 +556,10 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   };
 
   const handleDeleteSubmit = async () => {
+    const template = templates.find(t => t.id === selectedId);
+    const templateName = template ? template.name : 'esta plantilla';
     const ok = await showConfirm(
-      '¿Estás seguro de que deseas eliminar permanentemente esta plantilla de video?',
+      `¿Estás seguro de que deseas eliminar permanentemente la plantilla "${templateName}"?`,
       'Eliminar Plantilla',
       { confirmText: 'Eliminar', cancelText: 'Cancelar', type: 'danger' }
     );
@@ -567,13 +569,13 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       if (remaining.length > 0) {
         setSelectedId(remaining[0].id);
       } else {
-        setSelectedId('new');
+        handleCreateNew();
       }
       showToast('Plantilla eliminada exitosamente.', 'success');
     }
   };
 
-  const handleExportTemplate = () => {
+  const handleExportTemplate = async () => {
     try {
       const template = templates.find(t => t.id === selectedId);
       if (!template) {
@@ -599,18 +601,69 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         exportedWithApiKey: includeApiKeyInExport
       };
 
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(templatePackage, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `${template.name.toLowerCase().replace(/\s+/g, '_')}_template.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
+      const defaultFileName = `${(template.name || 'plantilla').toLowerCase().replace(/[^a-z0-9_-]/gi, '_')}_template.json`;
+      let saved = false;
+
+      // 1. Probar diálogo nativo del navegador / WebView (File System Access API)
+      if (typeof window !== 'undefined' && 'showSaveFilePicker' in window) {
+        try {
+          const handle = await window.showSaveFilePicker({
+            suggestedName: defaultFileName,
+            types: [{
+              description: 'Plantilla de Video JSON (*.json)',
+              accept: { 'application/json': ['.json'] }
+            }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(JSON.stringify(templatePackage, null, 2));
+          await writable.close();
+          saved = true;
+        } catch (pickerErr) {
+          if (pickerErr.name === 'AbortError') {
+            return; // El usuario cerró o canceló el diálogo
+          }
+        }
+      }
+
+      // 2. Si no se guardó en el frontend, probar el diálogo nativo de Windows del backend
+      if (!saved) {
+        try {
+          const res = await fetch('/api/dialog/save-template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              templatePackage,
+              defaultName: defaultFileName,
+              title: `Guardar Plantilla: ${template.name}`
+            })
+          });
+          const data = await res.json();
+          if (data.cancelled) {
+            return; // El usuario canceló
+          }
+          if (data.success) {
+            saved = true;
+          }
+        } catch (serverErr) {
+          console.warn('Fallback a descarga tradicional:', serverErr);
+        }
+      }
+
+      // 3. Fallback en caso extremo
+      if (!saved) {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(templatePackage, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", defaultFileName);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+      }
       
       if (includeApiKeyInExport) {
         showAlert('⚠️ Plantilla exportada exitosamente CON la clave de API incluida (bajo tu propio riesgo). Recuerda no compartir este archivo con personas no autorizadas.', 'Plantilla Exportada', 'warning');
       } else {
-        showToast('Plantilla exportada exitosamente (clave de API protegida).', 'success');
+        showToast('Plantilla exportada exitosamente.', 'success');
       }
     } catch (err) {
       console.error(err);
@@ -2529,11 +2582,11 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
 
             {/* BOTONES ACCIÓN */}
             <div className="flex gap-4 border-t border-border-dark pt-6 justify-end">
-              {templates.length > 1 && selectedId && selectedId !== 'new' && (
+              {selectedId && selectedId !== 'new' && (
                 <button
                   type="button"
                   onClick={handleDeleteSubmit}
-                  className="flex items-center gap-2 bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 font-bold px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                  className="flex items-center gap-2 bg-red-500/10 border border-red-500/25 text-red-400 hover:bg-red-500/20 font-bold px-4 py-2.5 rounded-xl text-xs transition-all cursor-pointer active:scale-95"
                 >
                   <Trash2 className="w-4 h-4" />
                   <span>Eliminar Plantilla</span>
