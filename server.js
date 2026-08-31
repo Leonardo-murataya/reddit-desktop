@@ -41,7 +41,7 @@ const ffmpeg = require('./services/ffmpeg');
 const dialogs = require('./services/dialogs');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 31826;
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
@@ -542,57 +542,10 @@ const handleCheckUpdates = async (req, res) => {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    const url = `https://api.github.com/repos/${repo}/releases/latest`;
-    const fetchRes = await fetch(url, { headers });
-
-    if (!fetchRes.ok) {
-      if (fetchRes.status === 404) {
-        // Fallback a consultar tags de Git directamente si no hay Release formal creada en la web
-        const tagsRes = await fetch(`https://api.github.com/repos/${repo}/tags`, { headers });
-        if (tagsRes.ok) {
-          const tags = await tagsRes.json();
-          if (tags && tags.length > 0) {
-            const latestTag = tags[0].name.replace(/^v/, '');
-            const hasUpdate = compareVersions(latestTag, currentVersion) > 0;
-            return res.json({
-              hasUpdate,
-              currentVersion,
-              latestVersion: latestTag,
-              releaseTitle: `Reddit Video Generator v${latestTag}`,
-              releaseNotes: 'Nueva versión disponible en el repositorio de GitHub.',
-              publishedAt: new Date().toISOString(),
-              releaseUrl: `https://github.com/${repo}/releases/tag/v${latestTag}`,
-              assets: []
-            });
-          }
-        }
-        return res.json({
-          hasUpdate: false,
-          currentVersion,
-          message: 'No se encontraron lanzamientos publicados en el repositorio.'
-        });
-      }
-      if (fetchRes.status === 401 || fetchRes.status === 403) {
-        return res.json({
-          hasUpdate: false,
-          currentVersion,
-          error: 'Acceso no autorizado a GitHub. Si tu repositorio es privado, ingresa un Token de GitHub con permiso de lectura (Contents: Read).'
-        });
-      }
-      return res.json({
-        hasUpdate: false,
-        currentVersion,
-        error: `Error al conectar con GitHub (Código HTTP: ${fetchRes.status})`
-      });
-    }
-
-    const release = await fetchRes.json();
-    const latestVersion = (release.tag_name || '').replace(/^v/, '');
-    
-    // Comparación de versiones semánticas (semver)
+    // Función semver robusta
     function compareVersions(v1, v2) {
-      const p1 = v1.split('.').map(n => parseInt(n, 10) || 0);
-      const p2 = v2.split('.').map(n => parseInt(n, 10) || 0);
+      const p1 = (v1 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+      const p2 = (v2 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
       for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
         const num1 = p1[i] || 0;
         const num2 = p2[i] || 0;
@@ -602,18 +555,51 @@ const handleCheckUpdates = async (req, res) => {
       return 0;
     }
 
+    // 1. Consultar releases y tags en paralelo
+    const [releasesRes, tagsRes] = await Promise.allSettled([
+      fetch(`https://api.github.com/repos/${repo}/releases`, { headers }),
+      fetch(`https://api.github.com/repos/${repo}/tags`, { headers })
+    ]);
+
+    const releases = releasesRes.status === 'fulfilled' && releasesRes.value.ok ? await releasesRes.value.json() : [];
+    const tags = tagsRes.status === 'fulfilled' && tagsRes.value.ok ? await tagsRes.value.json() : [];
+
+    const sortedReleases = Array.isArray(releases) ? releases.sort((a, b) => compareVersions(b.tag_name, a.tag_name)) : [];
+    const sortedTags = Array.isArray(tags) ? tags.sort((a, b) => compareVersions(b.name, a.name)) : [];
+
+    const topRelease = sortedReleases[0];
+    const topTag = sortedTags[0]?.name?.replace(/^v/, '');
+
+    // Determinar la versión más alta disponible
+    let latestVersion = currentVersion;
+    let matchingRelease = topRelease;
+
+    if (topTag && compareVersions(topTag, latestVersion) > 0) {
+      latestVersion = topTag;
+      // Buscar si hay una release específica para ese tag
+      const relForTag = sortedReleases.find(r => (r.tag_name || '').replace(/^v/, '') === topTag);
+      if (relForTag) {
+        matchingRelease = relForTag;
+      }
+    } else if (topRelease) {
+      const relTag = (topRelease.tag_name || '').replace(/^v/, '');
+      if (compareVersions(relTag, latestVersion) > 0) {
+        latestVersion = relTag;
+      }
+    }
+
     const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
 
     res.json({
       hasUpdate,
       currentVersion,
       latestVersion,
-      releaseTitle: release.name || release.tag_name,
-      releaseNotes: release.body || 'Sin notas de versión disponibles.',
-      publishedAt: release.published_at,
-      releaseUrl: release.html_url,
+      releaseTitle: matchingRelease?.name || `Reddit Video Generator v${latestVersion}`,
+      releaseNotes: matchingRelease?.body || 'Nueva versión disponible con mejoras de rendimiento, arquitectura autónoma y correcciones.',
+      publishedAt: matchingRelease?.published_at || new Date().toISOString(),
+      releaseUrl: matchingRelease?.html_url || `https://github.com/${repo}/releases/tag/v${latestVersion}`,
       githubToken: token,
-      assets: (release.assets || []).map(a => ({
+      assets: (matchingRelease?.assets || []).map(a => ({
         id: a.id,
         name: a.name,
         size: a.size,
@@ -668,6 +654,75 @@ app.get('/api/updates/download-asset', async (req, res) => {
   } catch (error) {
     console.error('Error al descargar asset:', error.message);
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Endpoint para omitir una versión específica (Estilo OBS Studio)
+app.post('/api/updates/skip-version', (req, res) => {
+  try {
+    const { version } = req.body;
+    if (!version) return res.status(400).json({ error: 'Versión requerida' });
+    const currentDb = db.readDb();
+    currentDb.settings = currentDb.settings || {};
+    currentDb.settings.skippedVersion = version;
+    db.writeDb(currentDb);
+    res.json({ success: true, skippedVersion: version });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Endpoint para descargar en disco e iniciar el instalador automáticamente en Windows (Estilo OBS Studio)
+app.post('/api/updates/launch-installer', async (req, res) => {
+  try {
+    const { assetId, filename, downloadUrl } = req.body;
+    const settings = db.readDb().settings || {};
+    const repo = settings.githubRepo || 'Leonardo-murataya/reddit-desktop';
+    const token = settings.githubToken || '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';
+
+    const updatesDir = path.join(__dirname, 'temp', 'updates');
+    if (!fs.existsSync(updatesDir)) {
+      fs.mkdirSync(updatesDir, { recursive: true });
+    }
+
+    const safeFilename = filename || 'Reddit_Video_Generator_Setup.exe';
+    const localFilePath = path.join(updatesDir, safeFilename);
+
+    let targetUrl = downloadUrl;
+    const headers = {
+      'User-Agent': 'Reddit-Desktop-Updater'
+    };
+
+    if (assetId) {
+      targetUrl = `https://api.github.com/repos/${repo}/releases/assets/${assetId}`;
+      headers['Authorization'] = `Bearer ${token}`;
+      headers['Accept'] = 'application/octet-stream';
+    }
+
+    const ghRes = await fetch(targetUrl, { headers, redirect: 'follow' });
+    if (!ghRes.ok) {
+      return res.status(ghRes.status).json({ error: `Error ${ghRes.status} al descargar el instalador.` });
+    }
+
+    const arrayBuffer = await ghRes.arrayBuffer();
+    fs.writeFileSync(localFilePath, Buffer.from(arrayBuffer));
+
+    // Ejecutar el instalador de Windows de manera desacoplada
+    if (process.platform === 'win32' && localFilePath.endsWith('.exe')) {
+      const { spawn } = require('child_process');
+      const installerProc = spawn(localFilePath, [], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      installerProc.unref();
+      console.log(`[Updater] Instalador ejecutado con éxito: ${localFilePath}`);
+      return res.json({ success: true, executed: true, localFilePath });
+    }
+
+    res.json({ success: true, executed: false, localFilePath });
+  } catch (err) {
+    console.error('Error al ejecutar el instalador:', err.message);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1135,12 +1190,28 @@ app.post('/api/generate', async (req, res) => {
   let normalizedBatch = [];
   if (seeds && Array.isArray(seeds) && seeds.length > 0) {
     normalizedBatch = seeds.map(s => {
-      const targetTmpl = currentDb.templates.find(t => t.id === s.templateId) || 
-                         currentDb.templates.find(t => t.id === templateId) || 
-                         currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
-                         currentDb.templates[0];
+      let targetTmpl = currentDb.templates.find(t => t.id === s.templateId);
+      if (!targetTmpl && s.profileId) {
+        targetTmpl = currentDb.templates.find(t => t.profileId === s.profileId);
+      }
+      if (!targetTmpl && s.profileId) {
+        const p = currentDb.profiles.find(prof => prof.id === s.profileId);
+        if (p) {
+          const pName = (p.name || '').toLowerCase().replace(/\(importado\)/g, '').trim();
+          targetTmpl = currentDb.templates.find(t => {
+            const tName = (t.name || '').toLowerCase().replace(/\(importada\)/g, '').trim();
+            return (pName.length > 3 && tName.includes(pName)) || (tName.length > 3 && pName.includes(tName));
+          });
+        }
+      }
+      if (!targetTmpl) {
+        targetTmpl = currentDb.templates.find(t => t.id === templateId) || 
+                     currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+                     currentDb.templates[0];
+      }
+
       const tmplId = targetTmpl ? targetTmpl.id : (s.templateId || templateId);
-      const profId = s.profileId || profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+      const profId = s.profileId || targetTmpl?.profileId || profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
       return {
         templateId: tmplId,
         count: 1,
@@ -1150,12 +1221,28 @@ app.post('/api/generate', async (req, res) => {
     });
   } else if (batch && Array.isArray(batch)) {
     normalizedBatch = batch.map(item => {
-      const targetTmpl = currentDb.templates.find(t => t.id === item.templateId) || 
-                         currentDb.templates.find(t => t.id === templateId) || 
-                         currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
-                         currentDb.templates[0];
+      let targetTmpl = currentDb.templates.find(t => t.id === item.templateId);
+      if (!targetTmpl && item.profileId) {
+        targetTmpl = currentDb.templates.find(t => t.profileId === item.profileId);
+      }
+      if (!targetTmpl && item.profileId) {
+        const p = currentDb.profiles.find(prof => prof.id === item.profileId);
+        if (p) {
+          const pName = (p.name || '').toLowerCase().replace(/\(importado\)/g, '').trim();
+          targetTmpl = currentDb.templates.find(t => {
+            const tName = (t.name || '').toLowerCase().replace(/\(importada\)/g, '').trim();
+            return (pName.length > 3 && tName.includes(pName)) || (tName.length > 3 && pName.includes(tName));
+          });
+        }
+      }
+      if (!targetTmpl) {
+        targetTmpl = currentDb.templates.find(t => t.id === templateId) || 
+                     currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+                     currentDb.templates[0];
+      }
+
       const tmplId = targetTmpl ? targetTmpl.id : (item.templateId || templateId);
-      const profId = item.profileId || profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+      const profId = item.profileId || targetTmpl?.profileId || profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
       return {
         templateId: tmplId,
         count: parseInt(item.count) || 1,
@@ -1164,9 +1251,14 @@ app.post('/api/generate', async (req, res) => {
       };
     });
   } else {
-    const targetTmpl = currentDb.templates.find(t => t.id === templateId) || 
-                       currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
-                       currentDb.templates[0];
+    let targetTmpl = currentDb.templates.find(t => t.id === templateId);
+    if (!targetTmpl && profileId) {
+      targetTmpl = currentDb.templates.find(t => t.profileId === profileId);
+    }
+    if (!targetTmpl) {
+      targetTmpl = currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+                   currentDb.templates[0];
+    }
     const tmplId = targetTmpl ? targetTmpl.id : templateId;
     const profId = profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
     normalizedBatch = [{
@@ -1382,8 +1474,9 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         throw new Error('Error al determinar la plantilla del lote actual.');
       }
 
-      const template = currentDb.templates.find(t => t.id === currentItem.templateId);
-      const finalProfileId = currentItem.profileId || template.profileId || currentDb.settings.defaultProfileId;
+      const currentDb = db.readDb();
+      const template = currentDb.templates.find(t => t.id === currentItem.templateId) || currentDb.templates[0];
+      const finalProfileId = currentItem.profileId || template?.profileId || currentDb.settings.defaultProfileId;
       const profile = currentDb.profiles.find(p => p.id === finalProfileId) || currentDb.profiles[0];
 
       // Guardar el perfil y plantilla activos en el objeto de trabajo para la UI
@@ -1395,7 +1488,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
 
       bgFolder = (profile && profile.backgroundFolder && profile.backgroundFolder.trim())
         ? profile.backgroundFolder
-        : defaultBackgroundFolder;
+        : (currentDb.settings.backgroundFolder || defaultBackgroundFolder);
       exportFolder = (profile && profile.exportFolder && profile.exportFolder.trim())
         ? profile.exportFolder
         : defaultExportFolder;
@@ -1415,12 +1508,20 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         job.stage = 'script';
         job.currentStep = 'Generando historia con IA';
         job.progress = 0;
+        const hasMultipleTemplatesInBatch = (Array.isArray(normalizedBatch) && normalizedBatch.length > 1) ||
+          new Set(normalizedBatch.map(item => item.templateId || item.profileId)).size > 1;
+
+        const cleanTemplateName = (template?.name || '')
+          .replace(/\s*\((Importad[ao]|Copia|Copy)\)/gi, '')
+          .trim();
+
+        const templateTag = hasMultipleTemplatesInBatch ? ` [Plantilla: "${cleanTemplateName}"]` : '';
 
         broadcastProgress({ 
           type: 'status', 
           status: 'processing', 
           activeJob: job, 
-          log: `${videoNumStr} [${template.name}] Generando guion usando Gemini API...` 
+          log: `${videoNumStr}${templateTag} Generando guion usando Gemini API...` 
         });
 
         // 1. LLAMAR A GEMINI PARA GENERAR LA HISTORIA Y DETECTAR GÉNERO
@@ -1606,7 +1707,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         // 3. GENERAR EL PNG DE LA TARJETA DE REDDIT
         job.stage = 'subtitles';
         job.currentStep = 'Renderizando tarjeta Reddit y subtítulos';
-        broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Renderizando Tarjeta de Reddit con Puppeteer...` });
+        broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Renderizando Tarjeta de Reddit con Motor de Lienzo Nativo...` });
         const cardData = {
           title: story.title,
           username: template.cardUsername,
@@ -1615,6 +1716,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           upvotes: template.upvotes,
           comments: template.comments,
           theme: template.cardTheme,
+          cardType: template.cardType || 'static',
           cardShowVerified: template.cardShowVerified !== undefined ? template.cardShowVerified : true,
           cardShowAwards: template.cardShowAwards !== undefined ? template.cardShowAwards : true,
           cardSelectedAwards: template.cardSelectedAwards || [],
@@ -1623,12 +1725,13 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           cardPadding: template.cardPadding !== undefined ? template.cardPadding : 12,
           cardGap: template.cardGap !== undefined ? template.cardGap : 7
         };
-        await cardRenderer.renderCard(cardData, cardImagePath);
+        const finalCardPath = await cardRenderer.renderCard(cardData, cardImagePath);
+        const activeCardPath = finalCardPath || cardImagePath;
         broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Tarjeta de Reddit renderizada con éxito.` });
 
         // 4. CALCULAR LOS SEGMENTOS DEL VIDEO DE FONDO (CON CONTINUIDAD AISLADA POR CANAL)
         broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Consultando línea de tiempo de video continuo...` });
-        const { segments } = timeline.getBackgroundSegments(totalDuration, bgFolder, profile.id);
+        const { segments } = timeline.getBackgroundSegments(totalDuration, bgFolder, profile ? profile.id : 'global');
         broadcastProgress({ type: 'status', status: 'processing', activeJob: job, log: `${videoNumStr} Pista de fondo virtual asignada.` });
 
         const cleanTitle = story.title
@@ -1687,7 +1790,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           let lastLogged916 = -1;
           await ffmpeg.compileVideo({
             backgroundSegments: segments,
-            cardImagePath,
+            cardImagePath: activeCardPath,
             titleAudioPath,
             bodyAudioPath,
             assSubtitlesPath: assPath916,
@@ -1738,7 +1841,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           let lastLogged169 = -1;
           await ffmpeg.compileVideo({
             backgroundSegments: segments, // Mismos segmentos de fondo para sincro perfecta!
-            cardImagePath,
+            cardImagePath: activeCardPath,
             titleAudioPath,
             bodyAudioPath,
             assSubtitlesPath: assPath169,
@@ -1823,7 +1926,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
             files: {
               titleAudio: titleAudioPath,
               bodyAudio: bodyAudioPath,
-              cardImage: cardImagePath,
+              cardImage: activeCardPath,
               subtitlesAss: assPath
             }
           };
@@ -1839,7 +1942,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           let lastLoggedPercent = -1;
           await ffmpeg.compileVideo({
             backgroundSegments: segments,
-            cardImagePath,
+            cardImagePath: activeCardPath,
             titleAudioPath,
             bodyAudioPath,
             assSubtitlesPath: assPath,

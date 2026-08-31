@@ -111,10 +111,14 @@ export default function App() {
       // 5. Refrescar Videos de Fondo
       refreshBackgroundVideos(settingsData.backgroundFolder);
 
-      // 6. Verificar actualización silenciosa de fondo al arrancar si está habilitado
+      // 6. Verificar actualización silenciosa de fondo al arrancar si está habilitado (Estilo OBS Studio)
       if (settingsData.autoCheckUpdate !== false) {
         performUpdateCheck(settingsData).then(info => {
           if (info && info.hasUpdate) {
+            // Si el usuario eligió "Omitir esta versión", no molestar al inicio para esa versión específica
+            if (settingsData.skippedVersion && settingsData.skippedVersion === info.latestVersion) {
+              return;
+            }
             setUpdateInfo(info);
             setShowUpdateModal(true);
           }
@@ -317,13 +321,23 @@ export default function App() {
 
         for (const item of preset.chain) {
           const pSeeds = item.seeds || [];
+          const itemProf = profiles.find(p => p.id === item.profileId) || profiles[0];
+          const itemTmpl = templates.find(t => t.id === item.templateId) ||
+                           templates.find(t => t.profileId === item.profileId) ||
+                           templates.find(t => {
+                             const pName = (item.profileName || itemProf?.name || '').toLowerCase().replace(/\(importado\)/g, '').trim();
+                             const tName = (t.name || '').toLowerCase().replace(/\(importada\)/g, '').trim();
+                             return (pName.length > 3 && tName.includes(pName)) || (tName.length > 3 && pName.includes(tName));
+                           }) ||
+                           templates[0];
+
           for (let i = 0; i < item.count; i++) {
             const prompt = (pSeeds[i] || '').trim();
             if (!prompt) hasEmpty = true;
             activeSeeds.push({
               prompt,
-              templateId: item.templateId,
-              profileId: item.profileId
+              templateId: itemTmpl?.id || item.templateId,
+              profileId: itemProf?.id || item.profileId
             });
           }
         }
@@ -468,51 +482,52 @@ export default function App() {
         return 0;
       };
 
-      const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, { headers });
-      if (res.ok) {
-        const rel = await res.json();
-        const latestTag = (rel.tag_name || '').replace(/^v/, '');
-        const hasUpdate = compareVersions(latestTag, currentVer) > 0;
-        return {
-          hasUpdate,
-          currentVersion: currentVer,
-          latestVersion: latestTag,
-          releaseTitle: rel.name || rel.tag_name,
-          releaseNotes: rel.body || 'Sin notas de versión disponibles.',
-          publishedAt: rel.published_at,
-          releaseUrl: rel.html_url,
-          githubToken: token,
-          assets: (rel.assets || []).map(a => ({
-            id: a.id,
-            name: a.name,
-            size: a.size,
-            apiUrl: a.url,
-            downloadUrl: a.browser_download_url
-          }))
-        };
-      }
+      const [releasesRes, tagsRes] = await Promise.allSettled([
+        fetch(`https://api.github.com/repos/${repo}/releases`, { headers }),
+        fetch(`https://api.github.com/repos/${repo}/tags`, { headers })
+      ]);
 
-      // Si releases/latest devuelve 404, consultar los tags de Git directamente
-      if (res.status === 404) {
-        const tagsRes = await fetch(`https://api.github.com/repos/${repo}/tags`, { headers });
-        if (tagsRes.ok) {
-          const tags = await tagsRes.json();
-          if (Array.isArray(tags) && tags.length > 0) {
-            const latestTag = tags[0].name.replace(/^v/, '');
-            const hasUpdate = compareVersions(latestTag, currentVer) > 0;
-            return {
-              hasUpdate,
-              currentVersion: currentVer,
-              latestVersion: latestTag,
-              releaseTitle: `Reddit Video Generator v${latestTag}`,
-              releaseNotes: 'Nueva versión disponible en el repositorio de GitHub.',
-              publishedAt: new Date().toISOString(),
-              releaseUrl: `https://github.com/${repo}/releases/tag/v${latestTag}`,
-              assets: []
-            };
-          }
+      const releases = releasesRes.status === 'fulfilled' && releasesRes.value.ok ? await releasesRes.value.json() : [];
+      const tags = tagsRes.status === 'fulfilled' && tagsRes.value.ok ? await tagsRes.value.json() : [];
+
+      const sortedReleases = Array.isArray(releases) ? releases.sort((a, b) => compareVersions(b.tag_name, a.tag_name)) : [];
+      const sortedTags = Array.isArray(tags) ? tags.sort((a, b) => compareVersions(b.name, a.name)) : [];
+
+      const topRelease = sortedReleases[0];
+      const topTag = sortedTags[0]?.name?.replace(/^v/, '');
+
+      let latestTag = currentVer;
+      let matchingRel = topRelease;
+
+      if (topTag && compareVersions(topTag, latestTag) > 0) {
+        latestTag = topTag;
+        const foundRel = sortedReleases.find(r => (r.tag_name || '').replace(/^v/, '') === topTag);
+        if (foundRel) matchingRel = foundRel;
+      } else if (topRelease) {
+        const relTag = (topRelease.tag_name || '').replace(/^v/, '');
+        if (compareVersions(relTag, latestTag) > 0) {
+          latestTag = relTag;
         }
       }
+
+      const hasUpdate = compareVersions(latestTag, currentVer) > 0;
+      return {
+        hasUpdate,
+        currentVersion: currentVer,
+        latestVersion: latestTag,
+        releaseTitle: matchingRel?.name || `Reddit Video Generator v${latestTag}`,
+        releaseNotes: matchingRel?.body || 'Nueva versión disponible con mejoras de rendimiento, arquitectura autónoma y correcciones.',
+        publishedAt: matchingRel?.published_at || new Date().toISOString(),
+        releaseUrl: matchingRel?.html_url || `https://github.com/${repo}/releases/tag/v${latestTag}`,
+        githubToken: token,
+        assets: (matchingRel?.assets || []).map(a => ({
+          id: a.id,
+          name: a.name,
+          size: a.size,
+          apiUrl: a.url,
+          downloadUrl: a.browser_download_url
+        }))
+      };
     } catch (ghErr) {
       console.error('Error al conectar con GitHub directamente:', ghErr);
     }
@@ -548,16 +563,6 @@ export default function App() {
 
         {/* Indicadores de Estado Globales */}
         <div className="flex items-center gap-3">
-          {/* Botón rápido de Buscar Actualizaciones */}
-          <button
-            type="button"
-            onClick={() => handleCheckUpdatesManually()}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-white border border-purple-500/20 text-[11px] font-bold transition-all cursor-pointer active:scale-95"
-            title="Comprobar si hay nuevas versiones en GitHub"
-          >
-            <span>Buscar Actualizaciones</span>
-          </button>
-
           {/* Badge de Job Activo en Header si existe */}
           {activeJob && (
             <div 
@@ -568,22 +573,6 @@ export default function App() {
               <span>Vídeo {activeJob.currentVideoIndex} de {activeJob.totalCount} ({activeJob.progress}%)</span>
             </div>
           )}
-
-          {/* Badge de GPU */}
-          <div className="hidden md:flex items-center gap-2 bg-black/40 border border-white/5 px-3 py-1 rounded-full text-[10.5px] font-bold text-gray-300">
-            <Cpu className="w-3.5 h-3.5 text-brand-primary" />
-            <span className="truncate max-w-[160px]">{gpuInfo?.gpuName || 'GPU Hardware'}</span>
-          </div>
-
-          {/* Botón de Integraciones */}
-          <button
-            type="button"
-            onClick={() => setActiveTab('integrations')}
-            className="w-7 h-7 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-white/5 active:scale-95"
-            title="Integraciones y Notificaciones"
-          >
-            <Bell className="w-3.5 h-3.5" />
-          </button>
         </div>
       </header>
 
@@ -660,6 +649,7 @@ export default function App() {
               onSaveProfile={handleSaveProfile}
               refreshBackground={(folder, profileId) => refreshBackgroundVideos(folder, profileId)}
               onGpuUpdate={setGpuInfo}
+              onCheckUpdate={handleCheckUpdatesManually}
             />
           )}
           

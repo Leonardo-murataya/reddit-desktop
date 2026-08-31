@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, FolderOpen, HardDrive, Cpu, Film, CheckCircle2, FileVideo, FileText } from 'lucide-react';
+import { Save, FolderOpen, HardDrive, Cpu, Film, CheckCircle2, FileVideo, FileText, Sparkles, RefreshCw } from 'lucide-react';
 
 export default function SettingsPanel({ 
   settings, 
@@ -11,7 +11,8 @@ export default function SettingsPanel({
   onSave, 
   onSaveProfile, 
   refreshBackground,
-  onGpuUpdate
+  onGpuUpdate,
+  onCheckUpdate
 }) {
   const setSelectedProfileId = onProfileIdChange || (() => {});
   const [backgroundFolder, setBackgroundFolder] = useState('');
@@ -22,6 +23,7 @@ export default function SettingsPanel({
   const [hashtags, setHashtags] = useState('');
   const [reportFolderSameAsVideo, setReportFolderSameAsVideo] = useState(true);
   const [reportFolder, setReportFolder] = useState('');
+  const [autoCheckUpdate, setAutoCheckUpdate] = useState(true);
   const [success, setSuccess] = useState('');
 
   const [isLoaded, setIsLoaded] = useState(false);
@@ -82,6 +84,7 @@ export default function SettingsPanel({
         setHashtags(settings.hashtags || '');
         setReportFolderSameAsVideo(settings.reportFolderSameAsVideo !== false);
         setReportFolder(settings.reportFolder || '');
+        setAutoCheckUpdate(settings.autoCheckUpdate !== false);
         folderToRefresh = settings.backgroundFolder || '';
       }
     } else {
@@ -109,8 +112,10 @@ export default function SettingsPanel({
       }
     }
 
-    refreshBackground(folderToRefresh, profileToRefresh);
-  }, [selectedProfileId, profiles, settings]);
+    if (folderToRefresh) {
+      refreshBackground(folderToRefresh, profileToRefresh);
+    }
+  }, [selectedProfileId, isLoaded]);
 
   const handlePickFolder = async (target) => {
     try {
@@ -162,7 +167,8 @@ export default function SettingsPanel({
         cleanTxtReport,
         hashtags,
         reportFolderSameAsVideo,
-        reportFolder
+        reportFolder,
+        autoCheckUpdate
       });
       setSuccess('Ajustes y rutas globales guardados exitosamente.');
       refreshBackground(backgroundFolder, 'global'); // Escanear biblioteca
@@ -496,6 +502,45 @@ export default function SettingsPanel({
               <p className="text-[9px] text-gray-500 mt-2">
                 * El playhead virtual se desliza hacia adelante con cada video generado para lograr un fondo de corrido, simulando un gameplay continuo de fondo.
               </p>
+            </div>
+          </div>
+
+          {/* Actualizaciones de Software (Estilo OBS Studio) */}
+          <div className="glass-panel rounded-2xl p-6 space-y-4">
+            <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center justify-between border-b border-border-dark pb-2">
+              <span className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span>Actualizaciones de Software</span>
+              </span>
+              <span className="text-[10px] font-mono font-bold text-gray-400">v1.0.0</span>
+            </h3>
+
+            <div className="space-y-3">
+              <label className="flex items-start gap-2.5 cursor-pointer bg-black/40 p-3 rounded-xl border border-border-dark hover:border-purple-500/30 transition-all">
+                <input
+                  type="checkbox"
+                  checked={autoCheckUpdate}
+                  onChange={(e) => setAutoCheckUpdate(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded text-purple-600 bg-gray-900 border-gray-700 focus:ring-0 cursor-pointer"
+                />
+                <div className="space-y-0.5">
+                  <span className="text-xs font-bold text-gray-200 block">Comprobar actualizaciones al iniciar</span>
+                  <span className="text-[10px] text-gray-400 block leading-tight">
+                    Busca nuevas versiones en segundo plano de manera silenciosa (estilo OBS Studio).
+                  </span>
+                </div>
+              </label>
+
+              {onCheckUpdate && (
+                <button
+                  type="button"
+                  onClick={onCheckUpdate}
+                  className="w-full py-2.5 px-3 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 hover:text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 shadow-sm"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Comprobar actualizaciones ahora</span>
+                </button>
+              )}
             </div>
           </div>
 

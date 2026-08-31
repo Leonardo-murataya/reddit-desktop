@@ -1,96 +1,123 @@
 import React, { useState } from 'react';
-import { Sparkles, Download, Clock, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck, Zap, Check } from 'lucide-react';
+import { Sparkles, Download, Clock, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck, Zap, Check, ExternalLink, ArrowRight, Ban } from 'lucide-react';
 
 export default function UpdateModal({ updateInfo, onClose }) {
   const [downloadingAsset, setDownloadingAsset] = useState(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [downloadStatus, setDownloadStatus] = useState('');
   const [downloadSuccess, setDownloadSuccess] = useState(false);
+  const [installerLaunched, setInstallerLaunched] = useState(false);
   const [downloadError, setDownloadError] = useState('');
 
   if (!updateInfo) return null;
 
   const defaultToken = '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';
   const token = updateInfo.githubToken || defaultToken;
+  const isUpToDate = !updateInfo.hasUpdate && !updateInfo.error && !updateInfo.loading;
+  const primaryAsset = updateInfo.assets && updateInfo.assets.length > 0 ? updateInfo.assets[0] : null;
 
-  const handleDownloadAsset = async (asset) => {
-    if (!asset) return;
-    setDownloadingAsset(asset.name);
+  // 1. Manejador de "Actualizar ahora" (Estilo OBS Studio: Descarga e inicio directo del instalador)
+  const handleUpdateNow = async (asset = null) => {
+    const targetAsset = asset || primaryAsset;
+    
+    // Si no hay archivo compilado adjunto a la release, abrir la página de GitHub
+    if (!targetAsset) {
+      if (updateInfo.releaseUrl) {
+        window.open(updateInfo.releaseUrl, '_blank');
+      }
+      return;
+    }
+
+    const assetName = targetAsset.name || 'Reddit_Video_Generator_Setup.exe';
+    setDownloadingAsset(assetName);
     setDownloadProgress(0);
+    setDownloadStatus('Iniciando descarga...');
     setDownloadSuccess(false);
+    setInstallerLaunched(false);
     setDownloadError('');
 
+    // Paso A: Intentar descargar y ejecutar directamente a través del backend local si está activo
     try {
-      let res;
-      // 1. Intentar descargar a través de la ruta backend local (streaming sin problemas de CORS)
-      if (asset.id) {
-        try {
-          const localUrl = `/api/updates/download-asset?assetId=${asset.id}&filename=${encodeURIComponent(asset.name || 'Reddit_Setup.exe')}`;
-          res = await fetch(localUrl);
-        } catch (e) {
-          console.warn('Backend local no disponible para streaming, intentando directo...', e);
-        }
-      }
-
-      // 2. Si el backend no respondió ok, intentar consulta con token directo
-      if (!res || !res.ok) {
-        const url = asset.apiUrl || asset.downloadUrl;
-        res = await fetch(url, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/octet-stream'
-          }
+      if (targetAsset.id) {
+        setDownloadStatus('Descargando e iniciando instalador en Windows...');
+        const launchRes = await fetch('/api/updates/launch-installer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assetId: targetAsset.id,
+            filename: assetName,
+            downloadUrl: targetAsset.downloadUrl || targetAsset.apiUrl
+          })
         });
-      }
 
-      if (!res.ok) {
-        throw new Error(`Error ${res.status}: No se pudo descargar el instalador.`);
-      }
-
-      const contentLength = res.headers.get('content-length');
-      const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-
-      const reader = res.body.getReader();
-      let receivedBytes = 0;
-      const chunks = [];
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-        receivedBytes += value.length;
-        if (totalBytes > 0) {
-          const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
-          setDownloadProgress(percent);
+        if (launchRes.ok) {
+          const launchData = await launchRes.json();
+          if (launchData.executed) {
+            setDownloadProgress(100);
+            setDownloadSuccess(true);
+            setInstallerLaunched(true);
+            setDownloadingAsset(null);
+            return;
+          }
         }
       }
+    } catch (backendErr) {
+      console.warn('Backend local no disponible para instalación directa, usando enlace de descarga nativo...', backendErr);
+    }
 
-      const blob = new Blob(chunks, { type: 'application/octet-stream' });
-      const blobUrl = URL.createObjectURL(blob);
+    // Paso B: Si el backend local no está corriendo o falló, abrir la descarga directamente en el navegador (sin CORS)
+    try {
+      const downloadLink = targetAsset.downloadUrl || updateInfo.releaseUrl || `https://github.com/Leonardo-murataya/reddit-desktop/releases/tag/v${updateInfo.latestVersion}`;
+      
       const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = asset.name || 'Reddit_Video_Generator_Setup.exe';
+      link.href = downloadLink;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.download = assetName;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
 
+      setDownloadProgress(100);
       setDownloadSuccess(true);
       setDownloadingAsset(null);
     } catch (err) {
-      console.error('Error durante la descarga:', err);
-      setDownloadError(err.message || 'Error al descargar el archivo.');
+      console.error('Error al iniciar descarga:', err);
+      if (updateInfo.releaseUrl) {
+        window.open(updateInfo.releaseUrl, '_blank');
+      }
+      setDownloadError('No se pudo iniciar la descarga automática. Se ha abierto la página de la versión en tu navegador.');
       setDownloadingAsset(null);
     }
   };
 
-  const isUpToDate = !updateInfo.hasUpdate && !updateInfo.error && !updateInfo.loading;
-  const primaryAsset = updateInfo.assets && updateInfo.assets.length > 0 ? updateInfo.assets[0] : null;
+  // 2. Manejador de "Omitir esta versión" (Estilo OBS Studio)
+  const handleSkipVersion = async () => {
+    try {
+      if (updateInfo.latestVersion) {
+        await fetch('/api/updates/skip-version', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ version: updateInfo.latestVersion })
+        });
+      }
+    } catch (e) {
+      console.warn('No se pudo guardar la versión omitida en settings:', e);
+    }
+    onClose();
+  };
+
+  // Formateador visual sencillo para notas de release de GitHub
+  const formatReleaseNotes = (notes) => {
+    if (!notes) return 'Mejoras de rendimiento, corrección de errores y nuevas funciones optimizadas.';
+    return notes;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
-      <div className="relative w-full max-w-lg bg-[#0b0f19] border border-purple-500/30 rounded-3xl shadow-2xl overflow-hidden text-gray-100 flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-xl bg-[#0b0f19] border border-purple-500/30 rounded-3xl shadow-2xl overflow-hidden text-gray-100 flex flex-col max-h-[90vh]">
         
-        {/* 1. Header con Gradiente según el estado */}
+        {/* 1. Header con Estilo OBS Studio */}
         <div className={`relative p-6 border-b border-white/10 ${
           updateInfo.hasUpdate 
             ? 'bg-gradient-to-r from-purple-950/80 via-indigo-950/80 to-purple-950/80' 
@@ -101,7 +128,7 @@ export default function UpdateModal({ updateInfo, onClose }) {
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-white p-1.5 rounded-xl hover:bg-white/10 transition-all cursor-pointer"
-            title="Cerrar"
+            title="Cerrar ventana"
           >
             <X size={18} />
           </button>
@@ -135,19 +162,19 @@ export default function UpdateModal({ updateInfo, onClose }) {
                     : 'bg-amber-500/30 text-amber-300 border-amber-400/40'
                 }`}>
                   {updateInfo.loading
-                    ? 'Verificando GitHub...'
+                    ? 'Consultando Servidor...'
                     : updateInfo.hasUpdate
-                    ? 'Actualización Disponible'
+                    ? 'Actualización de OBS Studio'
                     : isUpToDate
                     ? 'Software al Día'
-                    : 'Aviso del Sistema'}
+                    : 'Aviso de Conexión'}
                 </span>
               </div>
               <h3 className="text-lg font-black text-white mt-1 truncate">
                 {updateInfo.loading
-                  ? 'Buscando nuevas versiones...'
+                  ? 'Buscando actualizaciones...'
                   : updateInfo.hasUpdate
-                  ? (updateInfo.releaseTitle || `Versión v${updateInfo.latestVersion}`)
+                  ? `Actualización Disponible: v${updateInfo.latestVersion}`
                   : isUpToDate
                   ? '¡Tienes la versión más reciente!'
                   : 'Estado de Actualizaciones'}
@@ -159,29 +186,42 @@ export default function UpdateModal({ updateInfo, onClose }) {
         {/* 2. Cuerpo del Modal */}
         <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
           
-          {/* Caso A: Hay Actualización */}
+          {/* Caso A: Hay Actualización Disponible (Estilo OBS Studio) */}
           {updateInfo.hasUpdate && (
             <>
-              {/* Comparador de versiones */}
+              {/* Comparador de versiones destacado */}
               <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
                 <div className="text-left">
-                  <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Tu Versión</div>
-                  <div className="text-sm font-black text-gray-300">v{updateInfo.currentVersion}</div>
+                  <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Versión Instalada</div>
+                  <div className="text-sm font-black text-gray-300">v{updateInfo.currentVersion || '1.0.0'}</div>
                 </div>
-                <div className="text-purple-400 font-black text-xl">➔</div>
+                <ArrowRight className="text-purple-400 w-5 h-5 shrink-0" />
                 <div className="text-right">
-                  <div className="text-[11px] font-bold text-purple-400 uppercase tracking-wider">Nueva Versión</div>
+                  <div className="text-[10px] font-bold text-purple-400 uppercase tracking-wider">Nueva Versión</div>
                   <div className="text-sm font-black text-emerald-400">v{updateInfo.latestVersion} ✨</div>
                 </div>
               </div>
 
-              {/* Notas del Release / Novedades */}
+              {/* Registro de Cambios / Release Notes (OBS Box) */}
               <div>
-                <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-2">
-                  Novedades de la actualización:
-                </h4>
-                <div className="bg-black/40 border border-white/10 rounded-2xl p-4 text-xs text-gray-300 whitespace-pre-line leading-relaxed max-h-40 overflow-y-auto custom-scrollbar font-medium">
-                  {updateInfo.releaseNotes || 'Mejoras de rendimiento, corrección de errores y nuevas funciones.'}
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-400">
+                    Novedades y Registro de Cambios:
+                  </h4>
+                  {updateInfo.releaseUrl && (
+                    <a
+                      href={updateInfo.releaseUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-all"
+                    >
+                      <span>Ver en GitHub</span>
+                      <ExternalLink size={11} />
+                    </a>
+                  )}
+                </div>
+                <div className="bg-black/50 border border-white/10 rounded-2xl p-4 text-xs text-gray-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto custom-scrollbar font-medium font-sans">
+                  {formatReleaseNotes(updateInfo.releaseNotes)}
                 </div>
               </div>
 
@@ -191,79 +231,40 @@ export default function UpdateModal({ updateInfo, onClose }) {
                   <div className="flex items-center justify-between text-xs font-bold text-purple-200">
                     <span className="flex items-center gap-2">
                       <Loader2 size={14} className="animate-spin text-purple-400" />
-                      Descargando instalador...
+                      <span>{downloadStatus}</span>
                     </span>
-                    <span className="font-mono text-purple-300">{downloadProgress}%</span>
+                    <span className="font-mono text-purple-300 font-black">{downloadProgress}%</span>
                   </div>
-                  <div className="w-full bg-black/60 rounded-full h-2 overflow-hidden">
+                  <div className="w-full bg-black/60 rounded-full h-2.5 overflow-hidden">
                     <div
-                      className="bg-gradient-to-r from-purple-500 to-indigo-500 h-full transition-all duration-200 rounded-full"
+                      className="bg-gradient-to-r from-purple-500 via-indigo-500 to-emerald-400 h-full transition-all duration-200 rounded-full"
                       style={{ width: `${downloadProgress}%` }}
                     />
                   </div>
                 </div>
               )}
 
-              {/* Mensaje de Éxito al descargar */}
-              {downloadSuccess && (
-                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-300 text-xs flex items-center gap-2.5 animate-fadeIn font-bold">
+              {/* Notificación de Instalador Iniciado en Windows */}
+              {installerLaunched && (
+                <div className="p-3.5 bg-emerald-500/15 border border-emerald-500/40 rounded-2xl text-emerald-300 text-xs flex items-center gap-2.5 animate-fadeIn font-bold">
                   <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
-                  <span>¡Instalador descargado con éxito! Ábrelo desde tu carpeta de Descargas para actualizar.</span>
+                  <span>¡Instalador ejecutado con éxito! Sigue los pasos en pantalla para completar la actualización.</span>
                 </div>
               )}
 
-              {/* Mensaje de Error en descarga */}
+              {/* Mensaje de Éxito al descargar archivo */}
+              {downloadSuccess && !installerLaunched && (
+                <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-300 text-xs flex items-center gap-2.5 animate-fadeIn font-bold">
+                  <CheckCircle2 size={18} className="shrink-0 text-emerald-400" />
+                  <span>¡Instalador descargado con éxito en tu carpeta de Descargas! Ejecútalo para actualizar.</span>
+                </div>
+              )}
+
+              {/* Mensaje de Error */}
               {downloadError && (
                 <div className="p-3.5 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-rose-300 text-xs flex items-center gap-2.5 animate-fadeIn">
                   <AlertTriangle size={18} className="shrink-0 text-rose-400" />
                   <span>{downloadError}</span>
-                </div>
-              )}
-
-              {/* Archivos descargables si están disponibles */}
-              {updateInfo.assets && updateInfo.assets.length > 0 && (
-                <div>
-                  <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-400 mb-2">
-                    Archivo Instalador Disponible:
-                  </h4>
-                  <div className="space-y-2">
-                    {updateInfo.assets.map((asset, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all"
-                      >
-                        <div className="flex items-center gap-2.5 overflow-hidden">
-                          <Package size={16} className="text-purple-400 shrink-0" />
-                          <span className="text-xs font-bold text-gray-200 truncate" title={asset.name}>
-                            {asset.name}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          disabled={!!downloadingAsset}
-                          onClick={() => handleDownloadAsset(asset)}
-                          className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-lg text-xs font-extrabold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 shadow-sm shadow-purple-600/30 active:scale-95"
-                        >
-                          {downloadingAsset === asset.name ? (
-                            <>
-                              <Loader2 size={13} className="animate-spin" />
-                              <span>{downloadProgress}%</span>
-                            </>
-                          ) : downloadSuccess ? (
-                            <>
-                              <Check size={13} />
-                              <span>Descargado</span>
-                            </>
-                          ) : (
-                            <>
-                              <Download size={13} />
-                              <span>Descargar</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
                 </div>
               )}
             </>
@@ -271,27 +272,27 @@ export default function UpdateModal({ updateInfo, onClose }) {
 
           {/* Caso B: Ya está al día (Todo actualizado) */}
           {isUpToDate && (
-            <div className="space-y-4 text-center py-4">
+            <div className="space-y-4 text-center py-6">
               <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 shadow-xl shadow-emerald-500/10">
                 <CheckCircle2 size={36} />
               </div>
               <div>
-                <h4 className="text-sm font-black text-white uppercase tracking-wider">
+                <h4 className="text-base font-black text-white uppercase tracking-wider">
                   Reddit Video Generator v{updateInfo.currentVersion || '1.0.0'}
                 </h4>
                 <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto leading-relaxed">
-                  Estás disfrutando de la versión más reciente. Tu suite de escritorio cuenta con todas las optimizaciones de renderizado GPU y funciones activas.
+                  Estás utilizando la versión más reciente disponible. Tu software cuenta con todas las funciones activas y soporte acelerado por GPU.
                 </p>
               </div>
             </div>
           )}
 
-          {/* Caso C: Error o Aviso */}
+          {/* Caso C: Error o Aviso de Conexión */}
           {updateInfo.error && (
             <div className="bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-2xl p-4 text-xs space-y-2">
               <div className="flex items-center gap-2 font-bold">
                 <AlertTriangle size={16} className="text-amber-400 shrink-0" />
-                <span>Información de Conexión</span>
+                <span>Información del Servidor</span>
               </div>
               <p className="leading-relaxed text-gray-300">
                 {updateInfo.error}
@@ -300,42 +301,57 @@ export default function UpdateModal({ updateInfo, onClose }) {
           )}
         </div>
 
-        {/* 3. Botones de Acción */}
-        <div className="p-4 bg-black/40 border-t border-white/10 flex items-center justify-between gap-3">
+        {/* 3. Botones de Acción (Estilo Clásico OBS Studio: Actualizar ahora | Recordar más tarde | Omitir versión) */}
+        <div className="p-4 bg-black/40 border-t border-white/10 flex flex-wrap items-center justify-between gap-2.5">
           {updateInfo.hasUpdate ? (
             <>
+              {/* Botón 1: Omitir esta versión */}
               <button
                 type="button"
-                onClick={onClose}
-                className="flex-1 px-4 py-3 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-extrabold flex items-center justify-center gap-2 transition-all cursor-pointer border border-white/5 active:scale-95"
+                onClick={handleSkipVersion}
+                className="px-3 py-2 text-gray-500 hover:text-gray-300 rounded-xl text-[11px] font-bold transition-all cursor-pointer hover:bg-white/5 active:scale-95 flex items-center gap-1.5"
+                title="No volver a notificarme de esta versión en el arranque"
               >
-                <Clock size={14} />
-                <span>Recordar después</span>
+                <Ban size={12} />
+                <span>Omitir esta versión</span>
               </button>
-              
-              <button
-                type="button"
-                disabled={!!downloadingAsset || !primaryAsset}
-                onClick={() => handleDownloadAsset(primaryAsset)}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer active:scale-95"
-              >
-                {downloadingAsset ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    <span>Descargando ({downloadProgress}%)...</span>
-                  </>
-                ) : downloadSuccess ? (
-                  <>
-                    <Check size={14} />
-                    <span>¡Descargado con Éxito!</span>
-                  </>
-                ) : (
-                  <>
-                    <Zap size={14} className="fill-current" />
-                    <span>Descargar e Instalar v{updateInfo.latestVersion}</span>
-                  </>
-                )}
-              </button>
+
+              <div className="flex items-center gap-2 ml-auto">
+                {/* Botón 2: Recordar más tarde */}
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer border border-white/5 active:scale-95"
+                >
+                  <Clock size={13} />
+                  <span>Recordar más tarde</span>
+                </button>
+                
+                {/* Botón 3: Actualizar ahora */}
+                <button
+                  type="button"
+                  disabled={!!downloadingAsset}
+                  onClick={() => handleUpdateNow(primaryAsset)}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-black flex items-center gap-2 shadow-lg shadow-purple-600/30 transition-all cursor-pointer active:scale-95"
+                >
+                  {downloadingAsset ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>Actualizando...</span>
+                    </>
+                  ) : installerLaunched ? (
+                    <>
+                      <Check size={13} />
+                      <span>Instalador Listo</span>
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={13} className="fill-current" />
+                      <span>Actualizar ahora</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </>
           ) : (
             <button

@@ -126,6 +126,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   
   // Tarjeta de Reddit
   const [cardTheme, setCardTheme] = useState('dark');
+  const [cardType, setCardType] = useState('static'); // 'static' (PNG fija) o 'animated' (Medallas GIF)
   const [cardUsername, setCardUsername] = useState('postfully_user');
   const [cardSubreddit, setCardSubreddit] = useState('r/AskReddit');
   const [cardAvatar, setCardAvatar] = useState('https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
@@ -313,6 +314,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setAnimation(active.animation || 'tiktok-pop');
         setSubtitleBorderStyle(active.subtitleBorderStyle || 'outline');
         setCardTheme(active.cardTheme || 'dark');
+        setCardType(active.cardType || 'static');
         setCardUsername(active.cardUsername || 'postfully_user');
         setCardSubreddit(active.cardSubreddit || 'r/AskReddit');
         setCardAvatar(active.cardAvatar || 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
@@ -451,6 +453,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setAnimation('tiktok-pop');
     setSubtitleBorderStyle('outline');
     setCardTheme('dark');
+    setCardType('static');
     setCardUsername('reddit_new');
     setCardSubreddit('r/nosleep');
     setCardAvatar('https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
@@ -821,6 +824,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       animation,
       subtitleBorderStyle,
       cardTheme,
+      cardType: cardType || 'static',
       cardUsername,
       cardSubreddit,
       cardAvatar,
@@ -1312,16 +1316,27 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                     <span>Propiedades del Reddit Card</span>
                   </h3>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className="block text-[10px] font-bold text-gray-400">TEMA DEL CARD</label>
                       <select
                         value={cardTheme}
                         onChange={(e) => setCardTheme(e.target.value)}
-                        className="w-full bg-black/40 border border-border-dark rounded-xl p-2.5 text-xs text-white font-semibold"
+                        className="w-full bg-black/40 border border-border-dark rounded-xl p-2.5 text-xs text-white font-semibold cursor-pointer"
                       >
                         <option value="dark">Modo Oscuro Reddit</option>
                         <option value="light">Modo Claro Reddit</option>
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-gray-400">TIPO DE TARJETA</label>
+                      <select
+                        value={cardType}
+                        onChange={(e) => setCardType(e.target.value)}
+                        className="w-full bg-black/40 border border-border-dark rounded-xl p-2.5 text-xs text-brand-primary font-black cursor-pointer"
+                      >
+                        <option value="static">📷 Estática (Imagen PNG)</option>
+                        <option value="animated">✨ Animada (Medallas GIF)</option>
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -2758,7 +2773,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                       <div className="relative w-9 h-9 shrink-0 overflow-hidden rounded-full">
                         <img 
                           className="absolute w-full h-full object-cover" 
-                          src={cardAvatar && cardAvatar.startsWith('/avatars/') ? `http://localhost:5000${cardAvatar}` : (cardAvatar || 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png')} 
+                          src={cardAvatar && cardAvatar.startsWith('/avatars/') ? `${window.__BACKEND_URL__ || 'http://127.0.0.1:31826'}${cardAvatar}` : (cardAvatar || 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png')} 
                           alt="avatar" 
                           onError={(e) => { e.target.src = 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png'; }}
                         />

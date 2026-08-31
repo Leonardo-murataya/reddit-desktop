@@ -318,13 +318,23 @@ export default function Dashboard({
     if (profileChain && profileChain.length > 0) {
       for (const item of profileChain) {
         const pSeeds = chainSeeds[item.profileId] || [];
+        const itemProf = profiles.find(p => p.id === item.profileId) || profiles[0];
+        const itemTmpl = templates.find(t => t.id === item.templateId) ||
+                         templates.find(t => t.profileId === item.profileId) ||
+                         templates.find(t => {
+                           const pName = (item.profileName || itemProf?.name || '').toLowerCase().replace(/\(importado\)/g, '').trim();
+                           const tName = (t.name || '').toLowerCase().replace(/\(importada\)/g, '').trim();
+                           return (pName.length > 3 && tName.includes(pName)) || (tName.length > 3 && pName.includes(tName));
+                         }) ||
+                         templates[0];
+
         for (let i = 0; i < item.count; i++) {
           const prompt = (pSeeds[i] || '').trim();
           if (!prompt) hasEmpty = true;
           activeSeeds.push({
             prompt,
-            templateId: item.templateId || defaultTemp?.id,
-            profileId: item.profileId || defaultProf?.id
+            templateId: itemTmpl?.id,
+            profileId: itemProf?.id
           });
         }
       }
@@ -562,28 +572,6 @@ export default function Dashboard({
                 <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
                   2. Idea del Video o Tema
                 </label>
-                {!profileChain && (
-                  <div className="flex bg-black/50 rounded-xl p-0.5 border border-white/10">
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchInputMode('individual')}
-                      className={`px-2.5 py-0.5 text-[9.5px] font-black uppercase rounded-lg transition-all cursor-pointer ${
-                        seedInputMode === 'individual' ? 'bg-brand-primary text-white shadow-sm' : 'text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      Individual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchInputMode('bulk')}
-                      className={`px-2.5 py-0.5 text-[9.5px] font-black uppercase rounded-lg transition-all cursor-pointer ${
-                        seedInputMode === 'bulk' ? 'bg-brand-primary text-white shadow-sm' : 'text-gray-400 hover:text-white'
-                      }`}
-                    >
-                      Pegado Masivo
-                    </button>
-                  </div>
-                )}
               </div>
 
               {/* Input Area según Modo */}

@@ -26,11 +26,11 @@ export default defineConfig({
     tailwindcss()
   ],
   server: {
-    port: 3000,
+    port: 31825,
     proxy: {
-      '/api': createProxyOptions('http://localhost:5000'),
-      '/avatars': createProxyOptions('http://localhost:5000'),
-      '/previews': createProxyOptions('http://localhost:5000')
+      '/api': createProxyOptions('http://127.0.0.1:31826'),
+      '/avatars': createProxyOptions('http://127.0.0.1:31826'),
+      '/previews': createProxyOptions('http://127.0.0.1:31826')
     }
   }
 });

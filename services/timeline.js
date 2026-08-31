@@ -95,21 +95,24 @@ function getBackgroundSegments(duration, folderPath, profileId = 'global') {
   }
   
   let videos = [];
-  if (profile) {
+  if (profile && Array.isArray(profile.selectedFiles) && profile.selectedFiles.length > 0) {
     // Filtrar solo archivos que realmente existen físicamente en este equipo
-    const rawSelected = profile.selectedFiles || [];
-    videos = rawSelected.filter(f => f && typeof f === 'string' && fs.existsSync(f));
-  } else {
-    const rawSelected = currentDb.settings?.selectedFiles || currentDb.timeline?.selectedFiles || [];
-    videos = rawSelected.filter(f => f && typeof f === 'string' && fs.existsSync(f));
+    videos = profile.selectedFiles.filter(f => f && typeof f === 'string' && fs.existsSync(f));
+  } else if (!profile && currentDb.settings?.selectedFiles && currentDb.settings.selectedFiles.length > 0) {
+    videos = currentDb.settings.selectedFiles.filter(f => f && typeof f === 'string' && fs.existsSync(f));
   }
   
-  if (videos.length === 0) {
+  if (videos.length === 0 && profile && profile.backgroundFolder && fs.existsSync(profile.backgroundFolder)) {
     // Escaneamos la carpeta del perfil si existe en esta PC
+    videos = scanBackgroundVideos(profile.backgroundFolder);
+  }
+
+  if (videos.length === 0 && folderPath && fs.existsSync(folderPath)) {
+    // Escaneamos la carpeta pasada como parámetro
     videos = scanBackgroundVideos(folderPath);
   }
 
-  if (videos.length === 0 && currentDb.settings?.backgroundFolder) {
+  if (videos.length === 0 && currentDb.settings?.backgroundFolder && fs.existsSync(currentDb.settings.backgroundFolder)) {
     // Fallback a la carpeta de fondo global si existe en esta PC
     videos = scanBackgroundVideos(currentDb.settings.backgroundFolder);
   }
@@ -128,13 +131,13 @@ function getBackgroundSegments(duration, folderPath, profileId = 'global') {
   const isDifferent = (a, b) => {
     if (!a || !b || a.length !== b.length) return true;
     for (let i = 0; i < a.length; i++) {
-      if (a[i] !== b[i]) return true;
+      if (normalizePath(a[i]) !== normalizePath(b[i])) return true;
     }
     return false;
   };
 
   if (isDifferent(videos, backgroundVideos)) {
-    console.log(`[Timeline] La lista de videos de fondo cambió para este perfil. Reseteando playhead (Index: 0, Offset: 0)`);
+    console.log(`[Timeline - ${profile ? profile.name : 'Global'}] La lista de videos de fondo cambió. Sincronizando playhead (Index: 0, Offset: 0)`);
     currentVideoIndex = 0;
     currentOffset = 0;
   } else if (currentVideoIndex >= videos.length) {

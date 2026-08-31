@@ -21,29 +21,79 @@ export default function ProfileChainModal({ isOpen, onClose, profiles = [], temp
   const [selected, setSelected] = useState({});
   // { [profileId]: number }
   const [counts, setCounts] = useState({});
+  // { [profileId]: string (templateId) }
+  const [selectedTemplates, setSelectedTemplates] = useState({});
+
+  // Helper inteligente para buscar la plantilla que mejor corresponde al perfil
+  const getAutoTemplateForProfile = (profile) => {
+    if (!profile || templates.length === 0) return null;
+    // 1. Coincidencia directa por profileId
+    const directMatch = templates.find(t => t.profileId === profile.id);
+    if (directMatch) return directMatch;
+    // 2. Coincidencia por nombre (ej. "Solo Otra Historia Más" vs "Solo Otra Historia Más (Importada)")
+    const pName = (profile.name || '').toLowerCase().replace(/\(importado\)/g, '').trim();
+    const nameMatch = templates.find(t => {
+      const tName = (t.name || '').toLowerCase().replace(/\(importada\)/g, '').trim();
+      return (pName.length > 3 && tName.includes(pName)) || (tName.length > 3 && pName.includes(tName));
+    });
+    if (nameMatch) return nameMatch;
+    // 3. Fallback a la primera plantilla disponible
+    return templates[0];
+  };
 
   useEffect(() => {
     if (isOpen) {
-      if (initialChain && Array.isArray(initialChain)) {
+      if (initialChain && Array.isArray(initialChain) && initialChain.length > 0) {
         const sel = {};
         const cnts = {};
+        const tmpls = {};
         initialChain.forEach(item => {
           sel[item.profileId] = true;
           cnts[item.profileId] = item.count;
+          if (item.templateId) {
+            tmpls[item.profileId] = item.templateId;
+          }
+        });
+        // Para los perfiles que no estaban en initialChain, precalcular su mejor plantilla
+        profiles.forEach(p => {
+          if (!tmpls[p.id]) {
+            const autoTmpl = getAutoTemplateForProfile(p);
+            if (autoTmpl) tmpls[p.id] = autoTmpl.id;
+          }
         });
         setSelected(sel);
         setCounts(cnts);
+        setSelectedTemplates(tmpls);
       } else {
-        setSelected({});
-        setCounts({});
+        const sel = {};
+        const cnts = {};
+        const tmpls = {};
+        profiles.forEach(p => {
+          const autoTmpl = getAutoTemplateForProfile(p);
+          if (autoTmpl) tmpls[p.id] = autoTmpl.id;
+        });
+        setSelected(sel);
+        setCounts(cnts);
+        setSelectedTemplates(tmpls);
       }
     }
-  }, [isOpen, initialChain]);
+  }, [isOpen, initialChain, profiles, templates]);
 
   if (!isOpen) return null;
 
   const handleToggle = (profileId) => {
-    setSelected(prev => ({ ...prev, [profileId]: !prev[profileId] }));
+    setSelected(prev => {
+      const nextVal = !prev[profileId];
+      // Si se activa y no tenía plantilla elegida, asegurar la auto-plantilla
+      if (nextVal && !selectedTemplates[profileId]) {
+        const prof = profiles.find(p => p.id === profileId);
+        const autoT = getAutoTemplateForProfile(prof);
+        if (autoT) {
+          setSelectedTemplates(tPrev => ({ ...tPrev, [profileId]: autoT.id }));
+        }
+      }
+      return { ...prev, [profileId]: nextVal };
+    });
   };
 
   const handleCountChange = (profileId, val) => {
@@ -51,9 +101,17 @@ export default function ProfileChainModal({ isOpen, onClose, profiles = [], temp
     setCounts(prev => ({ ...prev, [profileId]: n }));
   };
 
-  // Buscar la plantilla asociada al perfil (la primera que tenga ese profileId)
+  const handleTemplateChange = (profileId, tmplId) => {
+    setSelectedTemplates(prev => ({ ...prev, [profileId]: tmplId }));
+  };
+
   const getTemplateForProfile = (profile) => {
-    return templates.find(t => t.profileId === profile.id) || templates[0];
+    const chosenId = selectedTemplates[profile.id];
+    if (chosenId) {
+      const found = templates.find(t => t.id === chosenId);
+      if (found) return found;
+    }
+    return getAutoTemplateForProfile(profile) || templates[0];
   };
 
   const handleSaveClick = () => {

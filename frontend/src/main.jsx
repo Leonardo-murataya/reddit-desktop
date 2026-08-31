@@ -11,9 +11,10 @@ const isTauriEnv = window.location.origin.includes('tauri.localhost') ||
                    window.__TAURI_INTERNALS__ || 
                    window.__TAURI__ || 
                    (window.location.protocol !== 'http:' && window.location.protocol !== 'https:') ||
-                   window.location.port !== '3000';
+                   window.location.port !== '31825';
 
-const BACKEND_ORIGIN = 'http://127.0.0.1:5000';
+const BACKEND_ORIGIN = 'http://127.0.0.1:31826';
+window.__BACKEND_URL__ = BACKEND_ORIGIN;
 
 if (isTauriEnv) {
   const originalFetch = window.fetch;

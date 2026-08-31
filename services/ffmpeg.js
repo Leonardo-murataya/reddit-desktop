@@ -99,8 +99,13 @@ async function compileVideo(params, onProgress = () => {}) {
 
     const S = backgroundSegments.length; // Índice de entradas posterior a los fondos
 
-    // 2. Agregar la imagen del card de Reddit
-    args.push('-loop', '1', '-i', cardImagePath); // Entrada S
+    // 2. Agregar la imagen o video animado del card de Reddit
+    const isAnimatedCard = typeof cardImagePath === 'string' && (cardImagePath.endsWith('.gif') || cardImagePath.endsWith('.webm') || cardImagePath.endsWith('.mov'));
+    if (isAnimatedCard) {
+      args.push('-stream_loop', '-1', '-i', cardImagePath); // Entrada S (en bucle continuo)
+    } else {
+      args.push('-loop', '1', '-i', cardImagePath); // Entrada S
+    }
 
     // 3. Agregar los audios
     args.push('-i', titleAudioPath); // Entrada S+1
@@ -362,8 +367,20 @@ async function compileVideo(params, onProgress = () => {}) {
       env: {
         ...process.env,
         FONTCONFIG_FILE: fontsConfPath
-      }
+      },
+      windowsHide: true
     });
+
+    // Asignar prioridad Below Normal en Windows para garantizar fluidez absoluta de la pantalla y el navegador
+    if (ffmpegProcess && ffmpegProcess.pid) {
+      try {
+        const os = require('os');
+        os.setPriority(ffmpegProcess.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
+        console.log(`[FFmpeg Priority] Proceso PID ${ffmpegProcess.pid} asignado con prioridad BELOW_NORMAL.`);
+      } catch (pErr) {
+        // Ignorar si el sistema operativo no soporta ajuste dinámico de prioridad
+      }
+    }
 
     let stderrAccumulator = '';
 
