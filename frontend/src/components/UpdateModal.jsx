@@ -18,75 +18,44 @@ export default function UpdateModal({ updateInfo, onClose }) {
 
   // 1. Manejador de "Actualizar ahora" (Estilo OBS Studio: Descarga e inicio directo del instalador)
   const handleUpdateNow = async (asset = null) => {
-    const targetAsset = asset || primaryAsset;
+    const targetAsset = asset || primaryAsset || updateInfo.assets?.[0];
+    const assetName = targetAsset?.name || 'Reddit_Video_Generator_1.0.1_Setup.exe';
     
-    // Si no hay archivo compilado adjunto a la release, abrir la página de GitHub
-    if (!targetAsset) {
-      if (updateInfo.releaseUrl) {
-        window.open(updateInfo.releaseUrl, '_blank');
-      }
-      return;
-    }
-
-    const assetName = targetAsset.name || 'Reddit_Video_Generator_Setup.exe';
     setDownloadingAsset(assetName);
-    setDownloadProgress(0);
-    setDownloadStatus('Iniciando descarga...');
+    setDownloadProgress(35);
+    setDownloadStatus('Descargando e iniciando instalador en Windows...');
     setDownloadSuccess(false);
     setInstallerLaunched(false);
     setDownloadError('');
 
-    // Paso A: Intentar descargar y ejecutar directamente a través del backend local si está activo
     try {
-      if (targetAsset.id) {
-        setDownloadStatus('Descargando e iniciando instalador en Windows...');
-        const launchRes = await fetch('/api/updates/launch-installer', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            assetId: targetAsset.id,
-            filename: assetName,
-            downloadUrl: targetAsset.downloadUrl || targetAsset.apiUrl
-          })
-        });
+      const launchRes = await fetch('/api/updates/launch-installer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assetId: targetAsset?.id,
+          filename: assetName,
+          downloadUrl: targetAsset?.downloadUrl || targetAsset?.apiUrl
+        })
+      });
 
-        if (launchRes.ok) {
-          const launchData = await launchRes.json();
-          if (launchData.executed) {
-            setDownloadProgress(100);
-            setDownloadSuccess(true);
-            setInstallerLaunched(true);
-            setDownloadingAsset(null);
-            return;
-          }
+      if (launchRes.ok) {
+        const launchData = await launchRes.json();
+        if (launchData.executed) {
+          setDownloadProgress(100);
+          setDownloadSuccess(true);
+          setInstallerLaunched(true);
+          setDownloadStatus('¡Instalador ejecutado con éxito!');
+          setDownloadingAsset(null);
+          return;
         }
+      } else {
+        const errJson = await launchRes.json().catch(() => ({}));
+        throw new Error(errJson.error || `Error ${launchRes.status} al descargar el instalador.`);
       }
-    } catch (backendErr) {
-      console.warn('Backend local no disponible para instalación directa, usando enlace de descarga nativo...', backendErr);
-    }
-
-    // Paso B: Si el backend local no está corriendo o falló, abrir la descarga directamente en el navegador (sin CORS)
-    try {
-      const downloadLink = targetAsset.downloadUrl || updateInfo.releaseUrl || `https://github.com/Leonardo-murataya/reddit-desktop/releases/tag/v${updateInfo.latestVersion}`;
-      
-      const link = document.createElement('a');
-      link.href = downloadLink;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.download = assetName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      setDownloadProgress(100);
-      setDownloadSuccess(true);
-      setDownloadingAsset(null);
     } catch (err) {
-      console.error('Error al iniciar descarga:', err);
-      if (updateInfo.releaseUrl) {
-        window.open(updateInfo.releaseUrl, '_blank');
-      }
-      setDownloadError('No se pudo iniciar la descarga automática. Se ha abierto la página de la versión en tu navegador.');
+      console.error('Error durante la actualización:', err);
+      setDownloadError(err.message || 'No se pudo descargar automáticamente el instalador. Verifica tu conexión a internet.');
       setDownloadingAsset(null);
     }
   };
@@ -164,7 +133,7 @@ export default function UpdateModal({ updateInfo, onClose }) {
                   {updateInfo.loading
                     ? 'Consultando Servidor...'
                     : updateInfo.hasUpdate
-                    ? 'Actualización de OBS Studio'
+                    ? 'Actualización de Software'
                     : isUpToDate
                     ? 'Software al Día'
                     : 'Aviso de Conexión'}
@@ -208,17 +177,6 @@ export default function UpdateModal({ updateInfo, onClose }) {
                   <h4 className="text-[11px] font-black uppercase tracking-wider text-gray-400">
                     Novedades y Registro de Cambios:
                   </h4>
-                  {updateInfo.releaseUrl && (
-                    <a
-                      href={updateInfo.releaseUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[10px] font-bold text-purple-400 hover:text-purple-300 flex items-center gap-1 transition-all"
-                    >
-                      <span>Ver en GitHub</span>
-                      <ExternalLink size={11} />
-                    </a>
-                  )}
                 </div>
                 <div className="bg-black/50 border border-white/10 rounded-2xl p-4 text-xs text-gray-300 whitespace-pre-line leading-relaxed max-h-48 overflow-y-auto custom-scrollbar font-medium font-sans">
                   {formatReleaseNotes(updateInfo.releaseNotes)}

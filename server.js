@@ -675,7 +675,7 @@ app.post('/api/updates/skip-version', (req, res) => {
 // Endpoint para descargar en disco e iniciar el instalador automáticamente en Windows (Estilo OBS Studio)
 app.post('/api/updates/launch-installer', async (req, res) => {
   try {
-    const { assetId, filename, downloadUrl } = req.body;
+    let { assetId, filename, downloadUrl } = req.body;
     const settings = db.readDb().settings || {};
     const repo = settings.githubRepo || 'Leonardo-murataya/reddit-desktop';
     const token = settings.githubToken || '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';
@@ -685,7 +685,29 @@ app.post('/api/updates/launch-installer', async (req, res) => {
       fs.mkdirSync(updatesDir, { recursive: true });
     }
 
-    const safeFilename = filename || 'Reddit_Video_Generator_Setup.exe';
+    // Si no se proporcionó assetId, buscarlo automáticamente en las releases de GitHub
+    if (!assetId) {
+      const relsRes = await fetch(`https://api.github.com/repos/${repo}/releases`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'User-Agent': 'Reddit-Desktop-Updater'
+        }
+      });
+      if (relsRes.ok) {
+        const rels = await relsRes.json();
+        if (Array.isArray(rels) && rels.length > 0) {
+          const topRel = rels[0];
+          const exeAsset = (topRel.assets || []).find(a => a.name.endsWith('.exe')) || topRel.assets?.[0];
+          if (exeAsset) {
+            assetId = exeAsset.id;
+            filename = filename || exeAsset.name;
+          }
+        }
+      }
+    }
+
+    const safeFilename = filename || 'Reddit_Video_Generator_1.0.1_Setup.exe';
     const localFilePath = path.join(updatesDir, safeFilename);
 
     let targetUrl = downloadUrl;
@@ -699,13 +721,22 @@ app.post('/api/updates/launch-installer', async (req, res) => {
       headers['Accept'] = 'application/octet-stream';
     }
 
+    if (!targetUrl) {
+      return res.status(400).json({ error: 'No se encontró un archivo ejecutable para descargar en esta versión.' });
+    }
+
+    console.log(`[Updater] Descargando actualización desde: ${targetUrl}`);
     const ghRes = await fetch(targetUrl, { headers, redirect: 'follow' });
     if (!ghRes.ok) {
       return res.status(ghRes.status).json({ error: `Error ${ghRes.status} al descargar el instalador.` });
     }
 
-    const arrayBuffer = await ghRes.arrayBuffer();
-    fs.writeFileSync(localFilePath, Buffer.from(arrayBuffer));
+    const { pipeline } = require('stream/promises');
+    const { Readable } = require('stream');
+    const fileStream = fs.createWriteStream(localFilePath);
+    await pipeline(Readable.fromWeb(ghRes.body), fileStream);
+
+    console.log(`[Updater] Descarga completada en: ${localFilePath}`);
 
     // Ejecutar el instalador de Windows de manera desacoplada
     if (process.platform === 'win32' && localFilePath.endsWith('.exe')) {
