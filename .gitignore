@@ -12,6 +12,7 @@ db.json
 # Directorios de compilación y temporales
 temp/
 bin/
+dist_installers/
 frontend/dist/
 src-tauri/target/
 src-tauri/gen/
