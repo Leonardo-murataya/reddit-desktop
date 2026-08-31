@@ -23,41 +23,51 @@ export default function UpdateModal({ updateInfo, onClose }) {
     
     setDownloadingAsset(assetName);
     setDownloadProgress(35);
-    setDownloadStatus('Descargando e iniciando instalador en Windows...');
+    setDownloadStatus('Iniciando instalación automática...');
     setDownloadSuccess(false);
     setInstallerLaunched(false);
     setDownloadError('');
 
-    try {
-      const launchRes = await fetch('/api/updates/launch-installer', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assetId: targetAsset?.id,
-          filename: assetName,
-          downloadUrl: targetAsset?.downloadUrl || targetAsset?.apiUrl
-        })
-      });
+    let lastErrorMsg = '';
 
-      if (launchRes.ok) {
-        const launchData = await launchRes.json();
-        if (launchData.executed) {
-          setDownloadProgress(100);
-          setDownloadSuccess(true);
-          setInstallerLaunched(true);
-          setDownloadStatus('¡Instalador ejecutado con éxito!');
-          setDownloadingAsset(null);
-          return;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        if (attempt > 1) {
+          setDownloadStatus(`Conectando con el instalador (intento ${attempt}/2)...`);
+          await new Promise(r => setTimeout(r, 800));
         }
-      } else {
-        const errJson = await launchRes.json().catch(() => ({}));
-        throw new Error(errJson.error || `Error ${launchRes.status} al descargar el instalador.`);
+
+        const launchRes = await fetch('/api/updates/launch-installer', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            assetId: targetAsset?.id,
+            filename: assetName,
+            downloadUrl: targetAsset?.downloadUrl || targetAsset?.apiUrl
+          })
+        });
+
+        if (launchRes.ok) {
+          const launchData = await launchRes.json().catch(() => ({}));
+          if (launchData.executed) {
+            setDownloadProgress(100);
+            setDownloadSuccess(true);
+            setInstallerLaunched(true);
+            setDownloadStatus('¡Instalador ejecutado con éxito!');
+            setDownloadingAsset(null);
+            return;
+          }
+        } else {
+          const errJson = await launchRes.json().catch(() => ({}));
+          lastErrorMsg = errJson.error || `Error ${launchRes.status} al descargar el instalador.`;
+        }
+      } catch (err) {
+        lastErrorMsg = err.message || 'Error de conexión con el motor de actualización.';
       }
-    } catch (err) {
-      console.error('Error durante la actualización:', err);
-      setDownloadError(err.message || 'No se pudo descargar automáticamente el instalador. Verifica tu conexión a internet.');
-      setDownloadingAsset(null);
     }
+
+    setDownloadError(lastErrorMsg || 'No se pudo iniciar automáticamente el instalador.');
+    setDownloadingAsset(null);
   };
 
   // 2. Manejador de "Omitir esta versión" (Estilo OBS Studio)

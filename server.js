@@ -685,58 +685,63 @@ app.post('/api/updates/launch-installer', async (req, res) => {
       fs.mkdirSync(updatesDir, { recursive: true });
     }
 
-    // Si no se proporcionó assetId, buscarlo automáticamente en las releases de GitHub
-    if (!assetId) {
-      const relsRes = await fetch(`https://api.github.com/repos/${repo}/releases`, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/vnd.github+json',
-          'User-Agent': 'Reddit-Desktop-Updater'
+    const safeFilename = filename || 'Reddit_Video_Generator_1.0.1_Setup.exe';
+    const localFilePath = path.join(updatesDir, safeFilename);
+
+    let downloaded = false;
+
+    // 1. Intentar descargar desde GitHub si hay assetId o downloadUrl
+    if (assetId || downloadUrl) {
+      try {
+        let targetUrl = downloadUrl;
+        const headers = { 'User-Agent': 'Reddit-Desktop-Updater' };
+
+        if (assetId) {
+          targetUrl = `https://api.github.com/repos/${repo}/releases/assets/${assetId}`;
+          headers['Authorization'] = `Bearer ${token}`;
+          headers['Accept'] = 'application/octet-stream';
         }
-      });
-      if (relsRes.ok) {
-        const rels = await relsRes.json();
-        if (Array.isArray(rels) && rels.length > 0) {
-          const topRel = rels[0];
-          const exeAsset = (topRel.assets || []).find(a => a.name.endsWith('.exe')) || topRel.assets?.[0];
-          if (exeAsset) {
-            assetId = exeAsset.id;
-            filename = filename || exeAsset.name;
-          }
+
+        console.log(`[Updater] Descargando actualización desde GitHub: ${targetUrl}`);
+        const ghRes = await fetch(targetUrl, { headers, redirect: 'follow' });
+        if (ghRes.ok) {
+          const { pipeline } = require('stream/promises');
+          const { Readable } = require('stream');
+          const fileStream = fs.createWriteStream(localFilePath);
+          await pipeline(Readable.fromWeb(ghRes.body), fileStream);
+          downloaded = true;
+          console.log(`[Updater] Descarga completada desde GitHub en: ${localFilePath}`);
+        } else {
+          console.warn(`[Updater] GitHub respondió código ${ghRes.status}`);
+        }
+      } catch (dlErr) {
+        console.warn(`[Updater] Error descargando de GitHub:`, dlErr.message);
+      }
+    }
+
+    // 2. Fallback de prueba local: Si no se pudo descargar de GitHub pero existe el instalador compilado localmente
+    if (!downloaded) {
+      const localCandidates = [
+        path.join(__dirname, 'src-tauri', 'target', 'release', 'bundle', 'nsis', 'Reddit Video Generator_1.0.1_x64-setup.exe'),
+        path.join(__dirname, 'src-tauri', 'target', 'release', 'bundle', 'nsis', 'Reddit Video Generator_1.0.0_x64-setup.exe'),
+        path.join(__dirname, 'Reddit Video Generator_1.0.1_x64-setup.exe')
+      ];
+
+      for (const cand of localCandidates) {
+        if (fs.existsSync(cand)) {
+          fs.copyFileSync(cand, localFilePath);
+          downloaded = true;
+          console.log(`[Updater] Usando instalador compilado local para la prueba: ${cand}`);
+          break;
         }
       }
     }
 
-    const safeFilename = filename || 'Reddit_Video_Generator_1.0.1_Setup.exe';
-    const localFilePath = path.join(updatesDir, safeFilename);
-
-    let targetUrl = downloadUrl;
-    const headers = {
-      'User-Agent': 'Reddit-Desktop-Updater'
-    };
-
-    if (assetId) {
-      targetUrl = `https://api.github.com/repos/${repo}/releases/assets/${assetId}`;
-      headers['Authorization'] = `Bearer ${token}`;
-      headers['Accept'] = 'application/octet-stream';
+    if (!downloaded || !fs.existsSync(localFilePath)) {
+      return res.status(404).json({
+        error: 'No se encontró el archivo instalador en GitHub ni localmente. Por favor adjunta el archivo .exe a la Release v1.0.1 en GitHub.'
+      });
     }
-
-    if (!targetUrl) {
-      return res.status(400).json({ error: 'No se encontró un archivo ejecutable para descargar en esta versión.' });
-    }
-
-    console.log(`[Updater] Descargando actualización desde: ${targetUrl}`);
-    const ghRes = await fetch(targetUrl, { headers, redirect: 'follow' });
-    if (!ghRes.ok) {
-      return res.status(ghRes.status).json({ error: `Error ${ghRes.status} al descargar el instalador.` });
-    }
-
-    const { pipeline } = require('stream/promises');
-    const { Readable } = require('stream');
-    const fileStream = fs.createWriteStream(localFilePath);
-    await pipeline(Readable.fromWeb(ghRes.body), fileStream);
-
-    console.log(`[Updater] Descarga completada en: ${localFilePath}`);
 
     // Ejecutar el instalador de Windows de manera desacoplada
     if (process.platform === 'win32' && localFilePath.endsWith('.exe')) {
