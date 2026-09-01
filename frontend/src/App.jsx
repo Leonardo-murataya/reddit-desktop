@@ -354,7 +354,7 @@ export default function App() {
         const count = preset.count || 1;
         const seeds = [];
         for (let i = 0; i < count; i++) {
-          const prompt = (preset.prompts && preset.prompts[i]) ? preset.prompts[i].trim() : '';
+          const prompt = (preset.prompts && preset.prompts[i]) ? preset.prompts[i].trim() : (preset.prompt || '').trim();
           if (!prompt) {
             throw new Error(`El video #${i + 1} del preset no tiene un tema o prompt definido.`);
           }

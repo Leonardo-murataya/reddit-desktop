@@ -55,6 +55,7 @@ export default function Dashboard({
   const [chainSeeds, setChainSeeds] = useState({});
   const [chainInputModes, setChainInputModes] = useState({});
   const [chainBulkTexts, setChainBulkTexts] = useState({});
+  const [chainBulkMode, setChainBulkMode] = useState(true);
   const [isChainModalOpen, setIsChainModalOpen] = useState(false);
 
   const [lastFailedCount, setLastFailedCount] = useState(0);
@@ -123,6 +124,45 @@ export default function Dashboard({
       next[profileId] = arr;
       return next;
     });
+    setChainBulkTexts(prev => {
+      const existing = (chainSeeds[profileId] || []);
+      const arr = [...existing];
+      arr[idx] = value;
+      return { ...prev, [profileId]: arr.filter(Boolean).join('\n') };
+    });
+  };
+
+  const handleToggleChainBulkMode = () => {
+    setChainBulkMode(prev => {
+      const nextMode = !prev;
+      if (!nextMode && profileChain) {
+        // Al desactivar pegado masivo (ir a inputs individuales), asegurarse de tener entradas completas
+        setChainSeeds(currentSeeds => {
+          const updated = { ...currentSeeds };
+          profileChain.forEach(item => {
+            const rawText = chainBulkTexts[item.profileId] !== undefined
+              ? chainBulkTexts[item.profileId]
+              : (updated[item.profileId] || []).join('\n');
+            const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+            const padded = [...lines];
+            while (padded.length < item.count) padded.push('');
+            updated[item.profileId] = padded.slice(0, item.count);
+          });
+          return updated;
+        });
+      } else if (nextMode && profileChain) {
+        // Al activar pegado masivo, sincronizar texto a partir de los inputs individuales
+        setChainBulkTexts(currentTexts => {
+          const updated = { ...currentTexts };
+          profileChain.forEach(item => {
+            const seedsArr = chainSeeds[item.profileId] || [];
+            updated[item.profileId] = seedsArr.filter(Boolean).join('\n');
+          });
+          return updated;
+        });
+      }
+      return nextMode;
+    });
   };
 
   const handleChainCountChange = (profileId, newCount) => {
@@ -162,19 +202,12 @@ export default function Dashboard({
   }, [count, templates, profiles, settings]);
 
   useEffect(() => {
-    if (seeds.length > 0) {
-      setSeeds(prev => {
-        const next = [...prev];
-        if (next[0] && (next[0].templateId !== selectedTemplate || next[0].profileId !== selectedProfile)) {
-          next[0] = {
-            ...next[0],
-            templateId: selectedTemplate || next[0].templateId,
-            profileId: selectedProfile || next[0].profileId
-          };
-          return next;
-        }
-        return prev;
-      });
+    if (selectedTemplate && seeds.length > 0) {
+      setSeeds(prev => prev.map(s => ({
+        ...s,
+        templateId: selectedTemplate,
+        profileId: selectedProfile || s.profileId
+      })));
     }
   }, [selectedTemplate, selectedProfile]);
 
@@ -304,6 +337,30 @@ export default function Dashboard({
     }
   }, [selectedProfile, profiles, settings]);
 
+  const handleSelectTemplate = (newTemplateId) => {
+    setSelectedTemplate(newTemplateId);
+    setSeeds(prev => prev.map(s => ({
+      ...s,
+      templateId: newTemplateId
+    })));
+    const tmpl = templates.find(t => t.id === newTemplateId);
+    if (tmpl && tmpl.profileId) {
+      setSelectedProfile(tmpl.profileId);
+      setSeeds(prev => prev.map(s => ({
+        ...s,
+        profileId: tmpl.profileId
+      })));
+    }
+  };
+
+  const handleSelectProfile = (newProfileId) => {
+    setSelectedProfile(newProfileId);
+    setSeeds(prev => prev.map(s => ({
+      ...s,
+      profileId: newProfileId
+    })));
+  };
+
   const handleStartGeneration = async (e) => {
     e.preventDefault();
     setSubmitError('');
@@ -342,8 +399,8 @@ export default function Dashboard({
       const currentSeeds = seeds.length > 0 ? seeds : [{ prompt: '' }];
       activeSeeds = currentSeeds.map(s => ({
         prompt: (s.prompt || '').trim(),
-        templateId: s.templateId || selectedTemplate || defaultTemp?.id,
-        profileId: s.profileId || selectedProfile || defaultProf?.id
+        templateId: selectedTemplate || s.templateId || defaultTemp?.id,
+        profileId: selectedProfile || s.profileId || defaultProf?.id
       }));
       hasEmpty = activeSeeds.some(s => !s.prompt);
     }
@@ -364,7 +421,11 @@ export default function Dashboard({
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seeds: activeSeeds })
+        body: JSON.stringify({
+          seeds: activeSeeds,
+          templateId: selectedTemplate || defaultTemp?.id,
+          profileId: selectedProfile || defaultProf?.id
+        })
       });
 
       const data = await res.json();
@@ -497,6 +558,20 @@ export default function Dashboard({
                     </button>
                     <button
                       type="button"
+                      onClick={handleToggleChainBulkMode}
+                      disabled={!!activeJob}
+                      className={`px-3 py-2 rounded-xl text-[10.5px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                        chainBulkMode
+                          ? 'bg-brand-primary text-white border-brand-primary shadow-md shadow-brand-primary/20'
+                          : 'bg-black/40 hover:bg-black/60 text-gray-300 border-white/10'
+                      }`}
+                      title={chainBulkMode ? 'Desactivar pegado masivo para editar por video individual' : 'Activar pegado masivo por renglones'}
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      <span>{chainBulkMode ? '✓ Pegado Masivo' : '📋 Pegado Masivo'}</span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => { setProfileChain(null); setChainSeeds({}); }}
                       disabled={!!activeJob}
                       className="px-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 rounded-xl text-[10.5px] border border-red-500/20 cursor-pointer active:scale-95"
@@ -577,21 +652,54 @@ export default function Dashboard({
               {/* Input Area según Modo */}
               {profileChain ? (
                 /* Modo Cadena */
-                <div className="space-y-3 max-h-[260px] overflow-y-auto pr-1 custom-scrollbar">
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
                   {profileChain.map((item) => (
-                    <div key={item.profileId} className="bg-black/30 p-3 rounded-2xl border border-white/10 space-y-2">
+                    <div key={item.profileId} className="bg-black/30 p-3 rounded-2xl border border-white/10 space-y-2.5">
                       <div className="flex items-center justify-between text-[11px] font-black text-white">
-                        <span>{item.profileName} ({item.count} videos)</span>
-                        <span className="text-[9px] text-brand-primary">{item.templateName}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-brand-primary" />
+                          {item.profileName} ({item.count} {item.count === 1 ? 'video' : 'videos'})
+                        </span>
+                        <span className="text-[9px] text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full font-bold border border-brand-primary/20">
+                          {item.templateName}
+                        </span>
                       </div>
-                      <textarea
-                        value={(chainSeeds[item.profileId] || []).join('\n')}
-                        onChange={(e) => handleChainBulkTextChange(item.profileId, e.target.value)}
-                        placeholder={`Pega las ideas para ${item.profileName} (1 por renglón)...`}
-                        rows="3"
-                        disabled={!!activeJob}
-                        className="w-full bg-black/50 border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium"
-                      />
+
+                      {chainBulkMode ? (
+                        /* Pegado Masivo Activado: Textarea por líneas */
+                        <div className="space-y-1">
+                          <textarea
+                            value={chainBulkTexts[item.profileId] !== undefined ? chainBulkTexts[item.profileId] : (chainSeeds[item.profileId] || []).join('\n')}
+                            onChange={(e) => handleChainBulkTextChange(item.profileId, e.target.value)}
+                            placeholder={`Pega las ${item.count} ideas para ${item.profileName} (1 por renglón)...`}
+                            rows={Math.max(2, Math.min(5, item.count || 2))}
+                            disabled={!!activeJob}
+                            className="w-full bg-black/50 border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium custom-scrollbar"
+                          />
+                          <span className="text-[9px] text-gray-500 block">
+                            ✔ {(chainSeeds[item.profileId] || []).filter(Boolean).length} de {item.count} ideas completadas
+                          </span>
+                        </div>
+                      ) : (
+                        /* Pegado Masivo Desactivado: Inputs individuales por video */
+                        <div className="space-y-1.5">
+                          {Array.from({ length: item.count }).map((_, vIdx) => (
+                            <div key={vIdx} className="flex items-center gap-2">
+                              <span className="text-[9.5px] font-bold text-brand-primary/80 w-14 shrink-0">
+                                Video #{vIdx + 1}:
+                              </span>
+                              <input
+                                type="text"
+                                value={(chainSeeds[item.profileId] && chainSeeds[item.profileId][vIdx]) || ''}
+                                onChange={(e) => handleChainSeedChange(item.profileId, vIdx, e.target.value)}
+                                placeholder={`Idea para ${item.profileName} #${vIdx + 1}...`}
+                                disabled={!!activeJob}
+                                className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary font-medium"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -643,7 +751,7 @@ export default function Dashboard({
                   </label>
                   <select
                     value={selectedTemplate}
-                    onChange={(e) => setSelectedTemplate(e.target.value)}
+                    onChange={(e) => handleSelectTemplate(e.target.value)}
                     disabled={!!activeJob}
                     className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-brand-primary cursor-pointer disabled:opacity-50"
                   >
@@ -659,7 +767,7 @@ export default function Dashboard({
                   </label>
                   <select
                     value={selectedProfile}
-                    onChange={(e) => setSelectedProfile(e.target.value)}
+                    onChange={(e) => handleSelectProfile(e.target.value)}
                     disabled={!!activeJob}
                     className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-brand-primary cursor-pointer disabled:opacity-50"
                   >

@@ -1267,12 +1267,16 @@ app.post('/api/generate', async (req, res) => {
   let normalizedBatch = [];
   if (seeds && Array.isArray(seeds) && seeds.length > 0) {
     normalizedBatch = seeds.map(s => {
-      let targetTmpl = currentDb.templates.find(t => t.id === s.templateId);
-      if (!targetTmpl && s.profileId) {
-        targetTmpl = currentDb.templates.find(t => t.profileId === s.profileId);
+      const explicitTmplId = s.templateId || templateId;
+      let targetTmpl = null;
+      if (explicitTmplId) {
+        targetTmpl = currentDb.templates.find(t => String(t.id).trim() === String(explicitTmplId).trim());
       }
       if (!targetTmpl && s.profileId) {
-        const p = currentDb.profiles.find(prof => prof.id === s.profileId);
+        targetTmpl = currentDb.templates.find(t => String(t.profileId).trim() === String(s.profileId).trim());
+      }
+      if (!targetTmpl && s.profileId) {
+        const p = currentDb.profiles.find(prof => String(prof.id).trim() === String(s.profileId).trim());
         if (p) {
           const pName = (p.name || '').toLowerCase().replace(/\(importado\)/g, '').trim();
           targetTmpl = currentDb.templates.find(t => {
@@ -1282,12 +1286,11 @@ app.post('/api/generate', async (req, res) => {
         }
       }
       if (!targetTmpl) {
-        targetTmpl = currentDb.templates.find(t => t.id === templateId) || 
-                     currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
+        targetTmpl = currentDb.templates.find(t => t.id === currentDb.settings.defaultTemplateId) || 
                      currentDb.templates[0];
       }
 
-      const tmplId = targetTmpl ? targetTmpl.id : (s.templateId || templateId);
+      const tmplId = targetTmpl ? targetTmpl.id : (explicitTmplId || currentDb.templates[0]?.id);
       const profId = s.profileId || targetTmpl?.profileId || profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
       return {
         templateId: tmplId,
