@@ -6,10 +6,9 @@ const fs = require('fs');
 const https = require('https');
 const { v4: uuidv4 } = require('uuid');
 
-// Guard de verificación de archivos (por si se ejecuta desde WhatsApp o ZIP no extraído)
+// Guard de verificación de módulos locales críticos
 const requiredFiles = [
-  path.join(__dirname, 'services', 'db.js'),
-  path.join(__dirname, 'frontend', 'src', 'main.jsx')
+  path.join(__dirname, 'services', 'db.js')
 ];
 
 for (const reqFile of requiredFiles) {
@@ -17,13 +16,7 @@ for (const reqFile of requiredFiles) {
     console.error('\n=======================================================================');
     console.error(' ⚠️ ERROR CRÍTICO: ARCHIVOS DEL PROGRAMA INCOMPLETOS O NO EXTRAÍDOS');
     console.error('=======================================================================');
-    console.error(' Estás ejecutando el programa desde el archivo comprimido (ZIP) o desde');
-    console.error(' la carpeta temporal de descargas de WhatsApp Desktop.\n');
-    console.error(' SOLUCIÓN FÁCIL:');
-    console.error(' 1. Cierra esta ventana.');
-    console.error(' 2. Haz clic derecho sobre el archivo ZIP que recibiste.');
-    console.error(' 3. Selecciona "Extraer todo..." y guárdalo en tu Escritorio.');
-    console.error(' 4. Abre la carpeta descomprimida en tu Escritorio e inicia el programa.');
+    console.error(`Falta el archivo indispensable: ${reqFile}`);
     console.error('=======================================================================\n');
     process.exit(1);
   }
@@ -47,18 +40,39 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-// Carpetas de almacenamiento temporal
-const TEMP_DIR = path.join(__dirname, 'temp');
-if (!fs.existsSync(TEMP_DIR)) {
-  fs.mkdirSync(TEMP_DIR, { recursive: true });
+// Directorios de almacenamiento seguro (con soporte para Program Files / APPDATA en clean PCs)
+function getStorageDir(subfolder) {
+  const localDir = path.join(__dirname, subfolder);
+  try {
+    if (!fs.existsSync(localDir)) {
+      fs.mkdirSync(localDir, { recursive: true });
+    }
+    const testFile = path.join(localDir, '.write_test');
+    fs.writeFileSync(testFile, '1');
+    fs.unlinkSync(testFile);
+    if (!__dirname.includes('_up_') && !__dirname.includes('Program Files')) {
+      return localDir;
+    }
+  } catch (e) {}
+
+  if (process.env.APPDATA) {
+    const userDir = path.join(process.env.APPDATA, 'Reddit Video Generator', subfolder);
+    if (!fs.existsSync(userDir)) {
+      try { fs.mkdirSync(userDir, { recursive: true }); } catch (e) {}
+    }
+    return userDir;
+  }
+  return localDir;
 }
+
+const TEMP_DIR = getStorageDir('temp');
 const PREVIEWS_DIR = path.join(TEMP_DIR, 'previews');
 if (!fs.existsSync(PREVIEWS_DIR)) {
-  fs.mkdirSync(PREVIEWS_DIR, { recursive: true });
+  try { fs.mkdirSync(PREVIEWS_DIR, { recursive: true }); } catch (e) {}
 }
 const AVATARS_DIR = path.join(TEMP_DIR, 'avatars');
 if (!fs.existsSync(AVATARS_DIR)) {
-  fs.mkdirSync(AVATARS_DIR, { recursive: true });
+  try { fs.mkdirSync(AVATARS_DIR, { recursive: true }); } catch (e) {}
 }
 
 /**

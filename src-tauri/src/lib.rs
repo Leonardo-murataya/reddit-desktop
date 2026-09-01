@@ -131,6 +131,19 @@ fn start_backend_server() -> Option<Child> {
        .current_dir(&work_dir)
        .env("PORT", BACKEND_PORT.to_string());
 
+    // Redirigir stdout y stderr a un archivo de log para diagnóstico
+    if let Some(app_data) = std::env::var_os("APPDATA") {
+        let log_dir = PathBuf::from(app_data).join("Reddit Video Generator");
+        let _ = std::fs::create_dir_all(&log_dir);
+        let log_path = log_dir.join("backend_engine.log");
+        if let Ok(log_file) = std::fs::OpenOptions::new().create(true).append(true).open(&log_path) {
+            if let Ok(err_file) = log_file.try_clone() {
+                cmd.stdout(std::process::Stdio::from(log_file));
+                cmd.stderr(std::process::Stdio::from(err_file));
+            }
+        }
+    }
+
     #[cfg(target_os = "windows")]
     {
         const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -140,6 +153,16 @@ fn start_backend_server() -> Option<Child> {
     match cmd.spawn() {
         Ok(child) => {
             log::info!("Node.js backend engine started successfully with PID: {} on port {}", child.id(), BACKEND_PORT);
+
+            // Esperar activamente a que el servidor Express esté escuchando en el puerto antes de abrir la UI
+            for _ in 0..60 {
+                if is_port_in_use(BACKEND_PORT) {
+                    log::info!("Backend server is ready and responding on port {}.", BACKEND_PORT);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+
             Some(child)
         }
         Err(err) => {

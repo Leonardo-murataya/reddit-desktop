@@ -1,7 +1,34 @@
 const fs = require('fs');
 const path = require('path');
 
-const DB_PATH = path.join(__dirname, '..', 'db.json');
+function getDbPath() {
+  const localDb = path.join(__dirname, '..', 'db.json');
+  try {
+    const localDir = path.join(__dirname, '..');
+    const testFile = path.join(localDir, '.write_test');
+    fs.writeFileSync(testFile, '1');
+    fs.unlinkSync(testFile);
+    if (!__dirname.includes('_up_') && !__dirname.includes('Program Files')) {
+      return localDb;
+    }
+  } catch (e) {}
+
+  if (process.env.APPDATA) {
+    const userDir = path.join(process.env.APPDATA, 'Reddit Video Generator');
+    if (!fs.existsSync(userDir)) {
+      try { fs.mkdirSync(userDir, { recursive: true }); } catch (e) {}
+    }
+    const userDb = path.join(userDir, 'db.json');
+    if (!fs.existsSync(userDb) && fs.existsSync(localDb)) {
+      try { fs.copyFileSync(localDb, userDb); } catch (e) {}
+    }
+    return userDb;
+  }
+
+  return localDb;
+}
+
+const DB_PATH = getDbPath();
 
 const INITIAL_DB = {
   profiles: [],
