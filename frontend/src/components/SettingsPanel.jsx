@@ -512,7 +512,7 @@ export default function SettingsPanel({
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 <span>Actualizaciones de Software</span>
               </span>
-              <span className="text-[10px] font-mono font-bold text-gray-400">v1.0.0</span>
+              <span className="text-[10px] font-mono font-bold text-gray-400">v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}</span>
             </h3>
 
             <div className="space-y-3">

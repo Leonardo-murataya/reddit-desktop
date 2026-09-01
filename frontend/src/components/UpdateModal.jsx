@@ -53,8 +53,13 @@ export default function UpdateModal({ updateInfo, onClose }) {
             setDownloadProgress(100);
             setDownloadSuccess(true);
             setInstallerLaunched(true);
-            setDownloadStatus('¡Instalador ejecutado con éxito!');
+            setDownloadStatus('¡Actualización lista! Cerrando la aplicación para aplicar cambios...');
             setDownloadingAsset(null);
+            setTimeout(() => {
+              try {
+                window.close();
+              } catch (e) {}
+            }, 1200);
             return;
           }
         } else {

@@ -42,7 +42,7 @@ export default function Sidebar({ activeTab, setActiveTab, gpuInfo, isCollapsed,
                 REDDIT STUDIO
               </h1>
               <span className="text-[8.5px] text-gray-400 font-bold tracking-widest block mt-1 uppercase">
-                Desktop Suite v1.0.0
+                Desktop Suite v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}
               </span>
             </div>
           )}

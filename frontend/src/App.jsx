@@ -445,7 +445,7 @@ export default function App() {
   };
 
   const performUpdateCheck = async (customSettings = null) => {
-    const currentVer = '1.0.0';
+    const currentVer = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
     
     // 1. Intentar consultar a través del backend local
     try {
@@ -540,7 +540,8 @@ export default function App() {
   };
 
   const handleCheckUpdatesManually = async () => {
-    setUpdateInfo({ loading: true, currentVersion: '1.0.0' });
+    const currentVer = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
+    setUpdateInfo({ loading: true, currentVersion: currentVer });
     setShowUpdateModal(true);
     const info = await performUpdateCheck();
     setUpdateInfo(info);

@@ -757,16 +757,43 @@ app.post('/api/updates/launch-installer', async (req, res) => {
       });
     }
 
-    // Ejecutar el instalador de Windows de manera desacoplada
+    // Ejecutar el instalador de Windows de manera desacoplada con la bandera /UPDATE (reemplazo in-place)
     if (process.platform === 'win32' && localFilePath.endsWith('.exe')) {
       const { spawn } = require('child_process');
-      const installerProc = spawn(localFilePath, [], {
-        detached: true,
-        stdio: 'ignore'
-      });
-      installerProc.unref();
-      console.log(`[Updater] Instalador ejecutado con éxito: ${localFilePath}`);
-      return res.json({ success: true, executed: true, localFilePath });
+
+      // 1. Responder primero al frontend para que muestre el estado de cierre
+      res.json({ success: true, executed: true, localFilePath });
+
+      // 2. Dar 1 segundo al frontend para mostrar el mensaje y cerrar la app limpiamente
+      setTimeout(() => {
+        try {
+          console.log(`[Updater] Lanzando instalador con /UPDATE: ${localFilePath}`);
+          const launcher = spawn('cmd.exe', [
+            '/c',
+            'timeout /t 1 /nobreak >nul &',
+            'start',
+            '""',
+            `"${localFilePath}"`,
+            '/UPDATE'
+          ], {
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true,
+            shell: true
+          });
+          launcher.unref();
+
+          // Cerrar el servidor Node.js para liberar node.exe y módulos nativos (.node)
+          setTimeout(() => {
+            console.log('[Updater] Cerrando proceso de servidor para permitir la actualización...');
+            process.exit(0);
+          }, 400);
+        } catch (spawnErr) {
+          console.error('[Updater] Error al lanzar comando desacoplado:', spawnErr);
+        }
+      }, 1000);
+
+      return;
     }
 
     res.json({ success: true, executed: false, localFilePath });

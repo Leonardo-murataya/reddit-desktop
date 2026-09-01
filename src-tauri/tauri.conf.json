@@ -44,6 +44,11 @@
       "../services/**/*",
       "../node_modules/**/*",
       "../frontend/public/assets/**/*"
-    ]
+    ],
+    "windows": {
+      "nsis": {
+        "installerHooks": "hooks.nsh"
+      }
+    }
   }
 }
