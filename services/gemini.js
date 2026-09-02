@@ -221,8 +221,8 @@ Reglas estrictas de redacción:
       let timeoutId;
       const timeoutPromise = new Promise((_, reject) => {
         timeoutId = setTimeout(() => {
-          reject(new Error('TIMEOUT: La solicitud a Gemini superó el límite de 60 segundos.'));
-        }, 60000);
+          reject(new Error('TIMEOUT: La solicitud a Gemini superó el límite de 90 segundos.'));
+        }, 90000);
       });
 
       let result;
@@ -282,13 +282,6 @@ Reglas estrictas de redacción:
 
       return storyData;
     } catch (error) {
-      console.error(`[Gemini] Error en intento ${attempt}:`, error.message || error);
-
-      // Si es el último intento, lanzamos el error
-      if (attempt >= maxAttempts) {
-        throw error;
-      }
-
       // Identificar si el error es definitivamente de autenticación o de API Key inválida/no activa
       const isAuthError = (error.status === 400 && error.message && error.message.includes('API key')) ||
         (error.message && (
@@ -328,11 +321,27 @@ Reglas estrictas de redacción:
           error.message.includes('not supported')
         ));
 
+      // Log amigable y limpio según la respuesta de Google
+      if (isQuotaError) {
+        console.log(`[Gemini] ℹ️ Cuota de Google para "${activeModel}" alcanzada (Límite 429).`);
+      } else if (isServiceUnavailable) {
+        console.log(`[Gemini] ℹ️ Modelo "${activeModel}" con alta demanda en Google (503).`);
+      } else if (isTimeoutError) {
+        console.log(`[Gemini] ℹ️ Tiempo de espera agotado para "${activeModel}".`);
+      } else {
+        console.warn(`[Gemini] Aviso en intento ${attempt}:`, (error.message || '').substring(0, 120));
+      }
+
+      // Si es el último intento, lanzamos el error
+      if (attempt >= maxAttempts) {
+        throw error;
+      }
+
       // ROTACIÓN DE CLAVES API
       if (isQuotaError || isServiceUnavailable || isTimeoutError || isAuthError) {
         if (keyIndex + 1 < keys.length) {
           keyIndex++;
-          console.log(`[Gemini] Error crítico/cuota/autenticación detectado con la clave actual. Rotando a la clave API #${keyIndex + 1} de ${keys.length}...`);
+          console.log(`[Gemini] 🔑 Rotando a la clave API #${keyIndex + 1} de ${keys.length}...`);
           attempt--; // No contar esta rotación de clave como un intento fallido del modelo
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;
@@ -363,29 +372,20 @@ Reglas estrictas de redacción:
         throw error;
       }
 
-      // Todos los demás errores transitorios son procesados aquí
+      // Fallback a modelo alternativo
       if (isQuotaError || isServiceUnavailable || isModelNotFoundError || isTimeoutError) {
-        // Registrar el error crítico y marcar el modelo actual como agotado/sobrecargado
-        const errorType = isQuotaError 
-          ? '429 (Cuota Agotada)' 
-          : (isServiceUnavailable 
-            ? '503 (Servicio Sobrecargado)' 
-            : (isModelNotFoundError 
-              ? '404 (Modelo no Encontrado)' 
-              : 'TIMEOUT (Tiempo de Espera Agotado)'));
-        console.log(`[Gemini] Error crítico tipo ${errorType} para el modelo: ${activeModel}`);
         markModelAsExhausted(activeModel);
 
         // Cambiar inmediatamente al siguiente modelo alternativo de la lista
         const oldModel = activeModel;
         const nextModel = getNextAvailableModel(activeModel);
-        console.log(`[Gemini] Aplicando fallback inmediato a: ${nextModel}`);
+        console.log(`[Gemini] 🔄 Cambiando automáticamente al modelo de respaldo: ${nextModel}`);
         activeModel = nextModel;
 
         // Si el modelo cambió con éxito, reintentamos de inmediato sin esperar el retardo largo
         if (activeModel !== oldModel) {
           keyIndex = 0; // Iniciar desde la primera clave con el nuevo modelo
-          console.log(`[Gemini] Reintentando generación inmediatamente con el modelo de respaldo: ${activeModel}`);
+          console.log(`[Gemini] ▶️ Generando historia con el modelo de respaldo: ${activeModel}...`);
           await new Promise(resolve => setTimeout(resolve, 200));
           continue;
         }
@@ -400,7 +400,7 @@ Reglas estrictas de redacción:
       }
 
       const currentDelay = 5000;
-      console.log(`[Gemini] Error transitorio detectado. Reintentando en ${currentDelay / 1000} segundos...`);
+      console.log(`[Gemini] Reintentando en ${currentDelay / 1000} segundos...`);
       
       await new Promise(resolve => setTimeout(resolve, currentDelay));
     }
