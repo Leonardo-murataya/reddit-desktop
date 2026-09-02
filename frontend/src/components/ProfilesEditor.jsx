@@ -3,13 +3,11 @@ import { Save, Plus, Trash2, KeyRound, Cpu, FileText, CheckCircle2, FolderOpen, 
 import { useUIModal } from '../context/UIModalContext';
 
 const GEMINI_MODELS = [
-  { value: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite (Ultra Rápido y Alta Disponibilidad)' },
-  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Alta Cuota & Estable - Recomendado)' },
-  { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash (Avanzado - Límite 20 req/día Free)' },
-  { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+  { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
   { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-  { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' }
+  { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
 ];
 
 export default function ProfilesEditor({ profiles, onSave, onDelete }) {
@@ -24,7 +22,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
   const [backgroundFolder, setBackgroundFolder] = useState('');
   const [primaryAttempts, setPrimaryAttempts] = useState(2);
   const [fallbackAttempts, setFallbackAttempts] = useState(3);
-  const [fallbackModels, setFallbackModels] = useState(['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash']);
+  const [fallbackModels, setFallbackModels] = useState(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
   const [success, setSuccess] = useState('');
 
   const toggleKeyVisibility = (index) => {
@@ -58,9 +56,11 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
         
         let loadedModels = active.fallbackModels && Array.isArray(active.fallbackModels) && active.fallbackModels.length > 0
           ? active.fallbackModels
-          : (active.model ? [active.model] : ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash']);
+          : (active.model ? [active.model] : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
         
-        if (loadedModels.length === 0) loadedModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite'];
+        // Filtrar cualquier modelo 2.5 u obsoleto
+        loadedModels = loadedModels.filter(m => m && !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
+        if (loadedModels.length === 0) loadedModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
         setFallbackModels(loadedModels);
         
         loadedProfileIdRef.current = targetId;
@@ -77,7 +77,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setBackgroundFolder('');
     setPrimaryAttempts(2);
     setFallbackAttempts(3);
-    setFallbackModels(['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash']);
+    setFallbackModels(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
     setSuccess('');
   };
 
@@ -351,9 +351,9 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                   {fallbackModels.map((modelVal, idx) => {
                     const modelObj = GEMINI_MODELS.find(m => m.value === modelVal) || { label: modelVal, value: modelVal };
                     return (
-                      <div key={idx} className="flex items-center justify-between bg-black/30 border border-border-dark/60 rounded-xl px-3 py-2 text-xs">
-                        <span className="text-white font-bold flex items-center gap-2">
-                          <span className="bg-brand-primary/10 text-brand-primary text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-brand-primary/20">
+                      <div key={idx} className="flex items-center justify-between gap-2 bg-black/30 border border-border-dark/60 rounded-xl px-3 py-2 text-xs">
+                        <div className="flex items-center gap-2 min-w-0 flex-1 text-white font-bold">
+                          <span className="bg-brand-primary/10 text-brand-primary text-[10px] w-5 h-5 rounded-full flex items-center justify-center border border-brand-primary/20 shrink-0">
                             {idx + 1}
                           </span>
                           <span className="truncate">{modelObj.label}</span>
@@ -366,7 +366,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                               Respaldo {idx}
                             </span>
                           )}
-                        </span>
+                        </div>
                         {fallbackModels.length > 1 && (
                           <button
                             type="button"
@@ -374,7 +374,8 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                               const newModels = fallbackModels.filter((_, i) => i !== idx);
                               setFallbackModels(newModels);
                             }}
-                            className="text-gray-500 hover:text-red-400 p-1 transition-colors cursor-pointer"
+                            className="text-gray-400 hover:text-red-400 p-1.5 transition-colors cursor-pointer shrink-0"
+                            title="Eliminar este modelo"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>

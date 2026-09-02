@@ -51,7 +51,10 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
   // 2. Le pedimos explícitamente que analice pronombres y relaciones (ej: "mi novia" -> masculino, "mi esposo" -> femenino)
   //    para categorizar el género como "male" o "female".
   
-  let activeModel = (modelName || 'gemini-2.5-flash').trim();
+  let activeModel = (modelName || 'gemini-3.7-flash').trim();
+  if (activeModel.includes('2.5') || activeModel === 'gemini-flash-lite-latest') {
+    activeModel = 'gemini-3.7-flash';
+  }
   
   // Normalizar la lista de modelos de prioridad secuencial
   let rawFallbackList = [];
@@ -65,22 +68,23 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
     .filter(Boolean)
     .map(model => {
       let m = (model || '').trim();
-      if (m === 'gemini-1.5-flash') return 'gemini-2.5-flash';
+      if (m === 'gemini-1.5-flash') return 'gemini-3.5-flash';
       if (m === 'gemini-3-flash') return 'gemini-3-flash-preview';
       if (m === 'gemini-3.1-flash') return 'gemini-3.1-flash-lite';
       if (m === 'gemini-3.7') return 'gemini-3.7-flash';
       return m;
-    });
+    })
+    .filter(m => !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
 
-  // Lista de modelos garantizados activos con alta cuota y velocidad
-  const guaranteedModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+  // Lista de modelos garantizados oficiales con nombres normales
+  const guaranteedModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'];
   guaranteedModels.forEach(m => {
     if (!fallbackModels.includes(m)) fallbackModels.push(m);
   });
 
   // Normalizar nombre del modelo activo si viene con alias antiguo
   if (activeModel === 'gemini-1.5-flash') {
-    activeModel = 'gemini-2.5-flash';
+    activeModel = 'gemini-3.5-flash';
   } else if (activeModel === 'gemini-3-flash') {
     activeModel = 'gemini-3-flash-preview';
   } else if (activeModel === 'gemini-3.1-flash') {
@@ -98,16 +102,16 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
       }
     }
     // 2. Probar en modelos garantizados
-    for (const model of ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash']) {
+    for (const model of ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']) {
       if (!isModelExhausted(model) && model !== currentModel) {
         return model;
       }
     }
-    // 3. Si todos están temporalmente marcados, devolver cualquiera que sea DIFERENTE al modelo actual
-    for (const model of ['gemini-2.5-flash', 'gemini-3.1-flash-lite']) {
+    // 3. Devolver cualquiera que sea DIFERENTE al modelo actual
+    for (const model of ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite']) {
       if (model !== currentModel) return model;
     }
-    return currentModel === 'gemini-2.5-flash' ? 'gemini-3.1-flash-lite' : 'gemini-2.5-flash';
+    return currentModel === 'gemini-3.7-flash' ? 'gemini-3.6-flash' : 'gemini-3.7-flash';
   }
 
   // Si el modelo principal está marcado temporalmente como agotado o sobrecargado,
