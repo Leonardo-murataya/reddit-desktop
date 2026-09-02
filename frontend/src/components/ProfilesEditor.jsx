@@ -32,38 +32,49 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     }));
   };
 
+  const loadProfileData = (prof) => {
+    if (!prof) return;
+    loadedProfileIdRef.current = prof.id;
+    setName(prof.name || '');
+    const parsedKeys = (prof.apiKey || '').split('\n').filter(Boolean);
+    setApiKeys(parsedKeys.length > 0 ? parsedKeys : ['']);
+    setSystemPrompt(prof.systemPrompt || '');
+    setBackgroundFolder(prof.backgroundFolder || '');
+    setPrimaryAttempts(prof.primaryAttempts !== undefined ? parseInt(prof.primaryAttempts) : 2);
+    setFallbackAttempts(prof.fallbackAttempts !== undefined ? parseInt(prof.fallbackAttempts) : 3);
+    
+    let loadedModels = prof.fallbackModels && Array.isArray(prof.fallbackModels) && prof.fallbackModels.length > 0
+      ? [...prof.fallbackModels]
+      : (prof.model ? [prof.model] : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
+    
+    loadedModels = loadedModels.filter(m => m && !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
+    if (loadedModels.length === 0) loadedModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+    setFallbackModels([...loadedModels]);
+  };
+
+  const handleProfileChange = (newId) => {
+    setSelectedId(newId);
+    if (newId === 'new') {
+      handleCreateNew();
+      return;
+    }
+    const prof = profiles.find(p => p.id === newId);
+    if (prof) {
+      loadProfileData(prof);
+    }
+  };
+
   // Sincronizar perfiles cargados
   useEffect(() => {
     if (profiles.length > 0) {
       if (selectedId === 'new') {
-        // En modo creación, no sobreescribir los estados que se acaban de resetear
         return;
       }
-      
       const targetId = selectedId || profiles[0].id;
-      const active = profiles.find(p => p.id === targetId);
-      
-      // Solo actualizar estados si cambió el perfil seleccionado
-      if (active && loadedProfileIdRef.current !== targetId) {
-        if (!selectedId) setSelectedId(targetId);
-        setName(active.name || '');
-        const parsedKeys = (active.apiKey || '').split('\n').filter(Boolean);
-        setApiKeys(parsedKeys.length > 0 ? parsedKeys : ['']);
-        setSystemPrompt(active.systemPrompt || '');
-        setBackgroundFolder(active.backgroundFolder || '');
-        setPrimaryAttempts(active.primaryAttempts !== undefined ? parseInt(active.primaryAttempts) : 2);
-        setFallbackAttempts(active.fallbackAttempts !== undefined ? parseInt(active.fallbackAttempts) : 3);
-        
-        let loadedModels = active.fallbackModels && Array.isArray(active.fallbackModels) && active.fallbackModels.length > 0
-          ? active.fallbackModels
-          : (active.model ? [active.model] : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
-        
-        // Filtrar cualquier modelo 2.5 u obsoleto
-        loadedModels = loadedModels.filter(m => m && !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
-        if (loadedModels.length === 0) loadedModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
-        setFallbackModels(loadedModels);
-        
-        loadedProfileIdRef.current = targetId;
+      if (!selectedId) setSelectedId(targetId);
+      if (loadedProfileIdRef.current !== targetId) {
+        const active = profiles.find(p => p.id === targetId);
+        if (active) loadProfileData(active);
       }
     }
   }, [selectedId, profiles]);
@@ -121,10 +132,11 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     const finalModels = fallbackModels.length > 0 ? fallbackModels : ['gemini-3.7-flash'];
     const primaryModel = finalModels[0];
 
-    const activeProfile = profiles.find(p => p.id === selectedId) || {};
+    const targetId = selectedId && selectedId !== 'new' ? selectedId : (profiles[0]?.id || undefined);
+    const activeProfile = (targetId ? profiles.find(p => p.id === targetId) : null) || {};
     const savedProfile = await onSave({
       ...activeProfile,
-      id: selectedId === 'new' ? undefined : selectedId,
+      id: selectedId === 'new' ? undefined : targetId,
       name,
       apiKey: apiKeys.map(k => k.trim()).filter(Boolean).join('\n'),
       model: primaryModel,
@@ -133,13 +145,13 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
       primaryAttempts: parseInt(primaryAttempts) || 2,
       fallbackAttempts: parseInt(fallbackAttempts) || 3,
       maxAttempts: (parseInt(primaryAttempts) || 2) + (parseInt(fallbackAttempts) || 3),
-      fallbackModels: finalModels,
+      fallbackModels: [...finalModels],
       fallbackModel: finalModels[1] || finalModels[0]
     });
     
     if (savedProfile && savedProfile.id) {
-      loadedProfileIdRef.current = null; // Fuerza recarga con los valores nuevos guardados
       setSelectedId(savedProfile.id);
+      loadProfileData(savedProfile);
     }
     
     showToast(`Perfil de IA "${name}" guardado exitosamente.`, 'success');
@@ -177,7 +189,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
               <label className="block text-[10px] font-bold text-gray-400">PERFIL ACTIVO</label>
               <select
                 value={selectedId}
-                onChange={(e) => setSelectedId(e.target.value)}
+                onChange={(e) => handleProfileChange(e.target.value)}
                 className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-brand-primary font-bold"
               >
                 {selectedId === 'new' && (
