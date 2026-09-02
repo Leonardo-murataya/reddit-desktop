@@ -51,29 +51,36 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
   // 2. Le pedimos explícitamente que analice pronombres y relaciones (ej: "mi novia" -> masculino, "mi esposo" -> femenino)
   //    para categorizar el género como "male" o "female".
   
-  let activeModel = modelName || 'gemini-3.7-flash';
+  let activeModel = (modelName || 'gemini-2.5-flash').trim();
   
   // Normalizar la lista de modelos de prioridad secuencial
-  const fallbackModels = (Array.isArray(customFallbackModels) ? customFallbackModels : [customFallbackModels])
+  let rawFallbackList = [];
+  if (Array.isArray(customFallbackModels)) {
+    rawFallbackList = customFallbackModels;
+  } else if (typeof customFallbackModels === 'string' && customFallbackModels.trim()) {
+    rawFallbackList = customFallbackModels.split(/\r?\n|,/).map(m => m.trim()).filter(Boolean);
+  }
+
+  const fallbackModels = rawFallbackList
     .filter(Boolean)
     .map(model => {
-      let m = model || 'gemini-3.7-flash';
-      if (m === 'gemini-1.5-flash' || m === 'gemini-2.5-flash') return 'gemini-3.5-flash';
+      let m = (model || '').trim();
+      if (m === 'gemini-1.5-flash') return 'gemini-2.5-flash';
       if (m === 'gemini-3-flash') return 'gemini-3-flash-preview';
       if (m === 'gemini-3.1-flash') return 'gemini-3.1-flash-lite';
       if (m === 'gemini-3.7') return 'gemini-3.7-flash';
       return m;
     });
 
-  if (fallbackModels.length === 0) {
-    fallbackModels.push('gemini-3.7-flash');
-    fallbackModels.push('gemini-3.6-flash');
-    fallbackModels.push('gemini-3.5-flash');
-  }
+  // Lista de modelos garantizados activos con alta cuota y velocidad
+  const guaranteedModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+  guaranteedModels.forEach(m => {
+    if (!fallbackModels.includes(m)) fallbackModels.push(m);
+  });
 
-  // Normalizar nombres de modelos del principal
-  if (activeModel === 'gemini-1.5-flash' || activeModel === 'gemini-2.5-flash') {
-    activeModel = 'gemini-3.5-flash';
+  // Normalizar nombre del modelo activo si viene con alias antiguo
+  if (activeModel === 'gemini-1.5-flash') {
+    activeModel = 'gemini-2.5-flash';
   } else if (activeModel === 'gemini-3-flash') {
     activeModel = 'gemini-3-flash-preview';
   } else if (activeModel === 'gemini-3.1-flash') {
@@ -84,16 +91,23 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
 
   // Helper para buscar el siguiente modelo disponible de la lista que no esté agotado
   function getNextAvailableModel(currentModel) {
+    // 1. Buscar en fallbackModels configurados
     for (const model of fallbackModels) {
       if (!isModelExhausted(model) && model !== currentModel) {
         return model;
       }
     }
-    const backupUniversal = 'gemini-3.5-flash';
-    if (currentModel !== backupUniversal && !isModelExhausted(backupUniversal)) {
-      return backupUniversal;
+    // 2. Probar en modelos garantizados
+    for (const model of ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash']) {
+      if (!isModelExhausted(model) && model !== currentModel) {
+        return model;
+      }
     }
-    return fallbackModels[0] || 'gemini-3.7-flash';
+    // 3. Si todos están temporalmente marcados, devolver cualquiera que sea DIFERENTE al modelo actual
+    for (const model of ['gemini-2.5-flash', 'gemini-3.1-flash-lite']) {
+      if (model !== currentModel) return model;
+    }
+    return currentModel === 'gemini-2.5-flash' ? 'gemini-3.1-flash-lite' : 'gemini-2.5-flash';
   }
 
   // Si el modelo principal está marcado temporalmente como agotado o sobrecargado,
@@ -370,6 +384,7 @@ Reglas estrictas de redacción:
 
         // Si el modelo cambió con éxito, reintentamos de inmediato sin esperar el retardo largo
         if (activeModel !== oldModel) {
+          keyIndex = 0; // Iniciar desde la primera clave con el nuevo modelo
           console.log(`[Gemini] Reintentando generación inmediatamente con el modelo de respaldo: ${activeModel}`);
           await new Promise(resolve => setTimeout(resolve, 200));
           continue;

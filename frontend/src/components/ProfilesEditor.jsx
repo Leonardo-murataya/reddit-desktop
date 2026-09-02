@@ -3,11 +3,13 @@ import { Save, Plus, Trash2, KeyRound, Cpu, FileText, CheckCircle2, FolderOpen, 
 import { useUIModal } from '../context/UIModalContext';
 
 const GEMINI_MODELS = [
-  { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash (Recomendado)' },
-  { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
-  { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
+  { value: 'gemini-flash-lite-latest', label: 'Gemini Flash Lite (Ultra Rápido y Alta Disponibilidad)' },
+  { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash (Alta Cuota & Estable - Recomendado)' },
+  { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash (Avanzado - Límite 20 req/día Free)' },
   { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite' },
-  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' }
+  { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview' },
+  { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
+  { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' }
 ];
 
 export default function ProfilesEditor({ profiles, onSave, onDelete }) {
@@ -22,7 +24,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
   const [backgroundFolder, setBackgroundFolder] = useState('');
   const [primaryAttempts, setPrimaryAttempts] = useState(2);
   const [fallbackAttempts, setFallbackAttempts] = useState(3);
-  const [fallbackModels, setFallbackModels] = useState(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
+  const [fallbackModels, setFallbackModels] = useState(['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash']);
   const [success, setSuccess] = useState('');
 
   const toggleKeyVisibility = (index) => {
@@ -56,11 +58,9 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
         
         let loadedModels = active.fallbackModels && Array.isArray(active.fallbackModels) && active.fallbackModels.length > 0
           ? active.fallbackModels
-          : (active.model ? [active.model] : ['gemini-3.7-flash']);
+          : (active.model ? [active.model] : ['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash']);
         
-        // Filtrar gemini-2.5-flash obsoleto
-        loadedModels = loadedModels.filter(m => m !== 'gemini-2.5-flash');
-        if (loadedModels.length === 0) loadedModels = ['gemini-3.7-flash'];
+        if (loadedModels.length === 0) loadedModels = ['gemini-2.5-flash', 'gemini-3.1-flash-lite'];
         setFallbackModels(loadedModels);
         
         loadedProfileIdRef.current = targetId;
@@ -77,7 +77,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setBackgroundFolder('');
     setPrimaryAttempts(2);
     setFallbackAttempts(3);
-    setFallbackModels(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
+    setFallbackModels(['gemini-2.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.7-flash']);
     setSuccess('');
   };
 
