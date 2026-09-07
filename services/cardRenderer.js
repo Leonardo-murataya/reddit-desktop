@@ -132,14 +132,30 @@ async function renderCard(cardData, outputPath) {
   const defaultAvatarPath = path.join(__dirname, '..', 'frontend', 'public', 'reddit-avatar.png');
   let avatarLoaded = false;
 
-  if (avatar && avatar.startsWith('/avatars/')) {
+  if (avatar && avatar.startsWith('data:image/')) {
+    try {
+      avatarImg = await loadImage(avatar);
+      avatarLoaded = true;
+    } catch (e) {
+      console.warn('[CardRenderer] Error cargando avatar Base64:', e.message);
+    }
+  } else if (avatar && avatar.startsWith('/avatars/')) {
     const filename = path.basename(avatar);
-    const localAvatar = path.join(__dirname, '..', 'temp', 'avatars', filename);
-    if (fs.existsSync(localAvatar)) {
-      try {
-        avatarImg = await loadImage(localAvatar);
-        avatarLoaded = true;
-      } catch (e) {}
+    const possiblePaths = [
+      path.join(__dirname, '..', 'temp', 'avatars', filename),
+      path.join(__dirname, '..', 'public', 'avatars', filename),
+      path.join(__dirname, '..', 'frontend', 'public', 'avatars', filename),
+      process.env.APPDATA ? path.join(process.env.APPDATA, 'Reddit Video Generator', 'avatars', filename) : null
+    ].filter(Boolean);
+
+    for (const p of possiblePaths) {
+      if (fs.existsSync(p)) {
+        try {
+          avatarImg = await loadImage(p);
+          avatarLoaded = true;
+          break;
+        } catch (e) {}
+      }
     }
   } else if (avatar && (avatar.startsWith('http://') || avatar.startsWith('https://'))) {
     try {
@@ -153,11 +169,19 @@ async function renderCard(cardData, outputPath) {
     } catch (e) {}
   }
 
-  if (!avatarLoaded && fs.existsSync(defaultAvatarPath)) {
-    try {
-      avatarImg = await loadImage(defaultAvatarPath);
-      avatarLoaded = true;
-    } catch (e) {}
+  // Fallback si no cargó el avatar personalizado
+  if (!avatarLoaded) {
+    if (fs.existsSync(defaultAvatarPath)) {
+      try {
+        avatarImg = await loadImage(defaultAvatarPath);
+        avatarLoaded = true;
+      } catch (e) {}
+    } else {
+      try {
+        avatarImg = await loadImage('https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
+        avatarLoaded = true;
+      } catch (e) {}
+    }
   }
 
   // 2. Cargar Medallas / Awards
