@@ -72,12 +72,13 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
       if (m === 'gemini-3-flash') return 'gemini-3-flash-preview';
       if (m === 'gemini-3.1-flash') return 'gemini-3.1-flash-lite';
       if (m === 'gemini-3.7') return 'gemini-3.7-flash';
+      if (m === 'gemini-3.8') return 'gemini-3.8-flash';
       return m;
     })
     .filter(m => !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
 
   // Lista de modelos garantizados oficiales con nombres normales
-  const guaranteedModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'];
+  const guaranteedModels = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'];
   guaranteedModels.forEach(m => {
     if (!fallbackModels.includes(m)) fallbackModels.push(m);
   });
@@ -91,6 +92,8 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
     activeModel = 'gemini-3.1-flash-lite';
   } else if (activeModel === 'gemini-3.7') {
     activeModel = 'gemini-3.7-flash';
+  } else if (activeModel === 'gemini-3.8') {
+    activeModel = 'gemini-3.8-flash';
   }
 
   // Helper para buscar el siguiente modelo disponible de la lista que no esté agotado
@@ -102,16 +105,16 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
       }
     }
     // 2. Probar en modelos garantizados
-    for (const model of ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']) {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']) {
       if (!isModelExhausted(model) && model !== currentModel) {
         return model;
       }
     }
     // 3. Devolver cualquiera que sea DIFERENTE al modelo actual
-    for (const model of ['gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite']) {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']) {
       if (model !== currentModel) return model;
     }
-    return currentModel === 'gemini-3.7-flash' ? 'gemini-3.6-flash' : 'gemini-3.7-flash';
+    return currentModel === 'gemini-3.8-flash' ? 'gemini-3.7-flash' : 'gemini-3.8-flash';
   }
 
   // Si el modelo principal está marcado temporalmente como agotado o sobrecargado,

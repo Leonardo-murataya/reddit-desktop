@@ -3,6 +3,7 @@ import { Save, Plus, Trash2, KeyRound, Cpu, FileText, CheckCircle2, FolderOpen, 
 import { useUIModal } from '../context/UIModalContext';
 
 const GEMINI_MODELS = [
+  { value: 'gemini-3.8-flash', label: 'Gemini 3.8 Flash' },
   { value: 'gemini-3.7-flash', label: 'Gemini 3.7 Flash' },
   { value: 'gemini-3.6-flash', label: 'Gemini 3.6 Flash' },
   { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash' },
