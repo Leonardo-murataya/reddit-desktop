@@ -19,8 +19,13 @@ function getDbPath() {
       try { fs.mkdirSync(userDir, { recursive: true }); } catch (e) {}
     }
     const userDb = path.join(userDir, 'db.json');
-    if (!fs.existsSync(userDb) && fs.existsSync(localDb)) {
-      try { fs.copyFileSync(localDb, userDb); } catch (e) {}
+    if (!fs.existsSync(userDb)) {
+      const defaultDbPath = path.join(__dirname, '..', 'default_db.json');
+      if (fs.existsSync(defaultDbPath)) {
+        try { fs.copyFileSync(defaultDbPath, userDb); } catch (e) {}
+      } else {
+        try { fs.writeFileSync(userDb, JSON.stringify(INITIAL_DB, null, 2), 'utf8'); } catch (e) {}
+      }
     }
     return userDb;
   }
@@ -31,11 +36,36 @@ function getDbPath() {
 const DB_PATH = getDbPath();
 
 const INITIAL_DB = {
-  profiles: [],
+  profiles: [
+    {
+      id: 'default-gemini',
+      name: 'Perfil Estándar Gemini',
+      apiKey: '',
+      model: 'gemini-3.8-flash',
+      systemPrompt: 'Eres un narrador experto de historias de Reddit. Genera historias cautivadoras, intrigantes y realistas que mantengan al espectador enganchado segundo a segundo.',
+      backgroundFolder: '',
+      primaryAttempts: 2,
+      fallbackAttempts: 3,
+      maxAttempts: 5,
+      fallbackModel: 'gemini-3.7-flash',
+      fallbackModels: [
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+        'gemini-3.6-flash',
+        'gemini-3.5-flash'
+      ],
+      renderEngine: 'global',
+      cleanTxtReport: false,
+      hashtags: '#HistoriasDeReddit #RedditEnEspañol #reddit',
+      reportFolderSameAsVideo: true,
+      reportFolder: ''
+    }
+  ],
   templates: [
     {
       id: 'default-template',
       name: 'TikTok Reddit Pop (Negro/Amarillo)',
+      profileId: 'default-gemini',
       maleVoice: 'es-MX-JorgeNeural',
       femaleVoice: 'es-MX-DaliaNeural',
       font: 'Arial Bold',
@@ -55,10 +85,10 @@ const INITIAL_DB = {
   timeline: {
     currentVideoIndex: 0,
     currentOffset: 0,
-    backgroundVideos: [] // List of local video paths
+    backgroundVideos: []
   },
   settings: {
-    exportFolder: path.join(process.env.USERPROFILE || 'C:\\', 'Desktop', 'redit_exports'),
+    exportFolder: '',
     defaultProfileId: 'default-gemini',
     defaultTemplateId: 'default-template'
   }

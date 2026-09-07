@@ -40,7 +40,7 @@
       "../bin/node.exe",
       "../server.js",
       "../package.json",
-      "../db.json",
+      "../default_db.json",
       "../services/**/*",
       "../node_modules/**/*",
       "../frontend/public/assets/**/*"

@@ -1,0 +1,58 @@
+{
+  "profiles": [
+    {
+      "id": "default-gemini",
+      "name": "Perfil Estandar Gemini",
+      "apiKey": "",
+      "model": "gemini-3.8-flash",
+      "systemPrompt": "Eres un narrador experto de historias de Reddit. Genera historias cautivadoras, intrigantes y realistas que mantengan al espectador enganchado segundo a segundo.",
+      "backgroundFolder": "",
+      "primaryAttempts": 2,
+      "fallbackAttempts": 3,
+      "maxAttempts": 5,
+      "fallbackModel": "gemini-3.7-flash",
+      "fallbackModels": [
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash"
+      ],
+      "renderEngine": "global",
+      "cleanTxtReport": false,
+      "hashtags": "#HistoriasDeReddit #RedditEnEspanol #reddit",
+      "reportFolderSameAsVideo": true,
+      "reportFolder": ""
+    }
+  ],
+  "templates": [
+    {
+      "id": "default-template",
+      "name": "TikTok Reddit Pop (Negro/Amarillo)",
+      "profileId": "default-gemini",
+      "maleVoice": "es-MX-JorgeNeural",
+      "femaleVoice": "es-MX-DaliaNeural",
+      "font": "Arial Bold",
+      "fontSize": 100,
+      "subtitleColor": "#FFFF00",
+      "passiveColor": "#FFFFFF",
+      "animation": "tiktok-pop",
+      "cardTheme": "dark",
+      "cardAvatar": "https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png",
+      "cardUsername": "reddit_stories",
+      "cardSubreddit": "r/AskReddit",
+      "upvotes": "14.5k",
+      "comments": "1.2k",
+      "showShare": true
+    }
+  ],
+  "timeline": {
+    "currentVideoIndex": 0,
+    "currentOffset": 0,
+    "backgroundVideos": []
+  },
+  "settings": {
+    "exportFolder": "",
+    "defaultProfileId": "default-gemini",
+    "defaultTemplateId": "default-template"
+  }
+}
