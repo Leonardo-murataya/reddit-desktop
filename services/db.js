@@ -74,7 +74,7 @@ const INITIAL_DB = {
       passiveColor: '#FFFFFF', // White passive
       animation: 'tiktok-pop',
       cardTheme: 'dark',
-      cardAvatar: 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png',
+      cardAvatar: '/assets/reddit-avatar.png',
       cardUsername: 'reddit_stories',
       cardSubreddit: 'r/AskReddit',
       upvotes: '14.5k',

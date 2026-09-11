@@ -206,21 +206,29 @@ function selectLocalImage(title = 'Selecciona una imagen') {
   try {
     const ext = path.extname(imagePath).toLowerCase();
     const filename = `avatar_${uuidv4().substring(0, 8)}${ext}`;
-    const targetDir = path.join(__dirname, '..', 'temp', 'avatars');
+    
+    // Directorio de almacenamiento seguro
+    let targetDir = path.join(__dirname, '..', 'temp', 'avatars');
+    if (process.env.APPDATA) {
+      targetDir = path.join(process.env.APPDATA, 'Reddit Video Generator', 'temp', 'avatars');
+    }
     if (!fs.existsSync(targetDir)) {
-      fs.mkdirSync(targetDir, { recursive: true });
+      try { fs.mkdirSync(targetDir, { recursive: true }); } catch (e) {}
     }
     const targetPath = path.join(targetDir, filename);
-    
-    // Copiar la imagen seleccionada de forma nativa a la carpeta estática
     fs.copyFileSync(imagePath, targetPath);
-    console.log(`[Avatar] Foto copiada con éxito a la carpeta del servidor: ${targetPath}`);
-    
-    const webUrl = `/avatars/${filename}`;
-    
+
+    // Leer el archivo y generar un Data URI Base64 real para uso offline inmediato
+    const mimeType = ext === '.png' ? 'image/png' : (ext === '.webp' ? 'image/webp' : (ext === '.svg' ? 'image/svg+xml' : 'image/jpeg'));
+    const fileBuffer = fs.readFileSync(targetPath);
+    const realBase64 = `data:${mimeType};base64,${fileBuffer.toString('base64')}`;
+
+    console.log(`[Avatar] Foto procesada con éxito y convertida a Base64 (${fileBuffer.length} bytes): ${targetPath}`);
+
     return {
       path: targetPath,
-      base64: webUrl
+      base64: realBase64,
+      url: `/avatars/${filename}`
     };
   } catch (error) {
     console.error('Error al procesar la imagen seleccionada:', error);

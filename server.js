@@ -75,6 +75,33 @@ if (!fs.existsSync(AVATARS_DIR)) {
   try { fs.mkdirSync(AVATARS_DIR, { recursive: true }); } catch (e) {}
 }
 
+// Servir carpetas estáticas para avatares y vistas previas
+app.use('/avatars', express.static(AVATARS_DIR));
+app.use('/avatars', express.static(path.join(__dirname, 'temp', 'avatars')));
+app.use('/avatars', express.static(path.join(__dirname, 'frontend', 'public', 'assets')));
+app.use('/previews', express.static(PREVIEWS_DIR));
+
+// Endpoint dinámico para avatares con resolución de fallback automático
+app.get('/avatars/:filename', (req, res) => {
+  const filename = path.basename(req.params.filename);
+  const possiblePaths = [
+    path.join(AVATARS_DIR, filename),
+    path.join(__dirname, 'temp', 'avatars', filename),
+    path.join(__dirname, 'frontend', 'public', 'assets', filename),
+    path.join(__dirname, 'frontend', 'public', filename)
+  ];
+  for (const p of possiblePaths) {
+    if (fs.existsSync(p)) {
+      return res.sendFile(p);
+    }
+  }
+  const defAvatar = path.join(__dirname, 'frontend', 'public', 'assets', 'reddit-avatar.png');
+  if (fs.existsSync(defAvatar)) {
+    return res.sendFile(defAvatar);
+  }
+  res.status(404).send('Avatar not found');
+});
+
 /**
  * Asigna de forma determinista una configuración de voz (voz, pitch, rate) a cada rol único
  * de la lista de diálogos, usando el pool de voces secundarias y alternando tonos.

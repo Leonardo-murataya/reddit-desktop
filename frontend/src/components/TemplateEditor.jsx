@@ -129,7 +129,8 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   const [cardType, setCardType] = useState('static'); // 'static' (PNG fija) o 'animated' (Medallas GIF)
   const [cardUsername, setCardUsername] = useState('postfully_user');
   const [cardSubreddit, setCardSubreddit] = useState('r/AskReddit');
-  const [cardAvatar, setCardAvatar] = useState('https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
+  const [cardAvatar, setCardAvatar] = useState('/assets/reddit-avatar.png');
+  const avatarFileInputRef = useRef(null);
   const [upvotes, setUpvotes] = useState('12.4k');
   const [comments, setComments] = useState('890');
   
@@ -317,7 +318,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setCardType(active.cardType || 'static');
         setCardUsername(active.cardUsername || 'postfully_user');
         setCardSubreddit(active.cardSubreddit || 'r/AskReddit');
-        setCardAvatar(active.cardAvatar || 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
+        setCardAvatar(active.cardAvatar || '/assets/reddit-avatar.png');
         setUpvotes(active.upvotes || '12.4k');
         setComments(active.comments || '890');
         setCardShowVerified(active.cardShowVerified !== undefined ? active.cardShowVerified : true);
@@ -456,7 +457,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setCardType('static');
     setCardUsername('reddit_new');
     setCardSubreddit('r/nosleep');
-    setCardAvatar('https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png');
+    setCardAvatar('/assets/reddit-avatar.png');
     setUpvotes('5.2k');
     setComments('321');
     setCardShowVerified(true);
@@ -718,16 +719,35 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     e.target.value = '';
   };
 
+  const handleNativeAvatarFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const base64Data = event.target.result;
+      if (base64Data) {
+        setCardAvatar(base64Data);
+        showToast('Foto de perfil cargada exitosamente.', 'success');
+      }
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
   const handleUploadLocalAvatar = async () => {
     try {
       const res = await fetch('/api/dialog/avatar');
       const data = await res.json();
-      if (data.base64) {
+      if (data && data.base64) {
         setCardAvatar(data.base64); // Guardar Base64 para visualización directa
         showToast('Foto de perfil local cargada exitosamente.', 'success');
+        return;
       }
     } catch (err) {
-      console.error('Error abriendo diálogo de imagen nativo:', err);
+      console.warn('Diálogo de servidor no disponible, abriendo selector web:', err);
+    }
+    if (avatarFileInputRef.current) {
+      avatarFileInputRef.current.click();
     }
   };
 
@@ -1393,6 +1413,13 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                       />
                     </div>
                     
+                    <input
+                      type="file"
+                      ref={avatarFileInputRef}
+                      onChange={handleNativeAvatarFile}
+                      accept="image/*"
+                      className="hidden"
+                    />
                     <button
                       type="button"
                       onClick={handleUploadLocalAvatar}
@@ -2773,9 +2800,18 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                       <div className="relative w-9 h-9 shrink-0 overflow-hidden rounded-full">
                         <img 
                           className="absolute w-full h-full object-cover" 
-                          src={cardAvatar && cardAvatar.startsWith('/avatars/') ? `${window.__BACKEND_URL__ || 'http://127.0.0.1:31826'}${cardAvatar}` : (cardAvatar || 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png')} 
+                          src={(() => {
+                            if (!cardAvatar) return '/assets/reddit-avatar.png';
+                            if (cardAvatar.startsWith('data:image/')) return cardAvatar;
+                            if (cardAvatar.startsWith('/avatars/')) return `${window.__BACKEND_URL__ || 'http://127.0.0.1:31826'}${cardAvatar}`;
+                            return cardAvatar;
+                          })()} 
                           alt="avatar" 
-                          onError={(e) => { e.target.src = 'https://www.redditstatic.com/avatars/avatar_default_02_FF4500.png'; }}
+                          onError={(e) => { 
+                            if (!e.target.src.includes('reddit-avatar.png')) {
+                              e.target.src = '/assets/reddit-avatar.png';
+                            }
+                          }}
                         />
                       </div>
                       <div className="flex flex-col items-start gap-0.5">
