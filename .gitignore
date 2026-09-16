@@ -4,6 +4,9 @@ frontend/node_modules/
 
 # Configuración y base de datos local (¡MUY IMPORTANTE! Contiene API Keys)
 db.json
+db.json.bak
+*.bak
+*.docx
 .env
 .env.local
 .env.*

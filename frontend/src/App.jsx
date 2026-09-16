@@ -35,6 +35,169 @@ export default function App() {
   const [jobError, setJobError] = useState('');
   const [jobSuccess, setJobSuccess] = useState('');
 
+  const performUpdateCheck = async (customSettings = null) => {
+    const currentVer = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
+    
+    // 1. Intentar consultar a través del backend local
+    try {
+      const res = await fetch('/api/updates/check');
+      if (res.ok) {
+        const info = await res.json();
+        if (info && (info.hasUpdate !== undefined || info.currentVersion)) {
+          return info;
+        }
+      }
+    } catch {
+      console.log('Backend local no disponible para updates, consultando GitHub directamente...');
+    }
+
+    // 2. Fallback: Consultar directamente la API de GitHub desde el cliente
+    try {
+      const cfg = customSettings || settings || {};
+      const repo = cfg.githubRepo || 'Leonardo-murataya/reddit-desktop';
+      const token = cfg.githubToken;
+      const headers = {
+        'Accept': 'application/vnd.github+json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      };
+
+      const compareVersions = (v1, v2) => {
+        const p1 = (v1 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+        const p2 = (v2 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
+        for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+          const num1 = p1[i] || 0;
+          const num2 = p2[i] || 0;
+          if (num1 > num2) return 1;
+          if (num1 < num2) return -1;
+        }
+        return 0;
+      };
+
+      const [releasesRes, tagsRes] = await Promise.allSettled([
+        fetch(`https://api.github.com/repos/${repo}/releases`, { headers }),
+        fetch(`https://api.github.com/repos/${repo}/tags`, { headers })
+      ]);
+
+      const releases = releasesRes.status === 'fulfilled' && releasesRes.value.ok ? await releasesRes.value.json() : [];
+      const tags = tagsRes.status === 'fulfilled' && tagsRes.value.ok ? await tagsRes.value.json() : [];
+
+      const sortedReleases = Array.isArray(releases) ? releases.sort((a, b) => compareVersions(b.tag_name, a.tag_name)) : [];
+      const sortedTags = Array.isArray(tags) ? tags.sort((a, b) => compareVersions(b.name, a.name)) : [];
+
+      const topRelease = sortedReleases[0];
+      const topTag = sortedTags[0]?.name?.replace(/^v/, '');
+
+      let latestTag = currentVer;
+      let matchingRel = topRelease;
+
+      if (topTag && compareVersions(topTag, latestTag) > 0) {
+        latestTag = topTag;
+        const foundRel = sortedReleases.find(r => (r.tag_name || '').replace(/^v/, '') === topTag);
+        if (foundRel) matchingRel = foundRel;
+      } else if (topRelease) {
+        const relTag = (topRelease.tag_name || '').replace(/^v/, '');
+        if (compareVersions(relTag, latestTag) > 0) {
+          latestTag = relTag;
+        }
+      }
+
+      const hasUpdate = compareVersions(latestTag, currentVer) > 0;
+      return {
+        hasUpdate,
+        currentVersion: currentVer,
+        latestVersion: latestTag,
+        releaseTitle: matchingRel?.name || `Reddit Video Generator v${latestTag}`,
+        releaseNotes: matchingRel?.body || 'Nueva versión disponible con mejoras de rendimiento, arquitectura autónoma y correcciones.',
+        publishedAt: matchingRel?.published_at || new Date().toISOString(),
+        releaseUrl: matchingRel?.html_url || `https://github.com/${repo}/releases/tag/v${latestTag}`,
+        githubToken: token || '',
+        assets: (matchingRel?.assets || []).map(a => ({
+          id: a.id,
+          name: a.name,
+          size: a.size,
+          apiUrl: a.url,
+          downloadUrl: a.browser_download_url
+        }))
+      };
+    } catch (ghErr) {
+      console.error('Error al conectar con GitHub directamente:', ghErr);
+    }
+
+    return {
+      hasUpdate: false,
+      currentVersion: currentVer,
+      error: 'No se pudo conectar con los servidores de GitHub para buscar actualizaciones. Verifica tu conexión a internet.'
+    };
+  };
+
+  const refreshBackgroundVideos = async (folder, profileId) => {
+    try {
+      let targetFolder = folder;
+      if (!targetFolder && profileId && Array.isArray(profiles) && profiles.length > 0) {
+        const prof = profiles.find(p => p.id === profileId);
+        if (prof && prof.backgroundFolder) {
+          targetFolder = prof.backgroundFolder;
+        }
+      }
+      if (!targetFolder && settings?.backgroundFolder) {
+        targetFolder = settings.backgroundFolder;
+      }
+
+      const res = await fetch('/api/background/status', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder: targetFolder || '', profileId: profileId || '' })
+      });
+      const data = await res.json();
+      setBackgroundStatus(data || { count: 0, totalDuration: 0, files: [], playhead: {} });
+    } catch (err) {
+      console.error('Error al consultar videos de fondo:', err);
+    }
+  };
+
+  const fetchData = async () => {
+    try {
+      // 1. Obtener Detección de Hardware
+      const gpuRes = await fetch('/api/detect-hardware');
+      const gpuData = await gpuRes.json();
+      setGpuInfo(gpuData);
+
+      // 2. Obtener Ajustes
+      const settingsRes = await fetch('/api/settings');
+      const settingsData = await settingsRes.json();
+      setSettings(settingsData);
+
+      // 3. Obtener Perfiles
+      const profilesRes = await fetch('/api/profiles');
+      const profilesData = await profilesRes.json();
+      setProfiles(profilesData);
+
+      // 4. Obtener Plantillas
+      const templatesRes = await fetch('/api/templates');
+      const templatesData = await templatesRes.json();
+      setTemplates(templatesData);
+
+      // 5. Refrescar Videos de Fondo
+      refreshBackgroundVideos(settingsData.backgroundFolder);
+
+      // 6. Verificar actualización silenciosa de fondo al arrancar si está habilitado (Estilo OBS Studio)
+      if (settingsData.autoCheckUpdate !== false) {
+        performUpdateCheck(settingsData).then(info => {
+          if (info && info.hasUpdate) {
+            // Si el usuario eligió "Omitir esta versión", no molestar al inicio para esa versión específica
+            if (settingsData.skippedVersion && settingsData.skippedVersion === info.latestVersion) {
+              return;
+            }
+            setUpdateInfo(info);
+            setShowUpdateModal(true);
+          }
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.error('Error cargando datos iniciales:', err);
+    }
+  };
+
   // Conectar SSE globalmente al montar App (persiste entre tabs)
   useEffect(() => {
     const eventSource = new EventSource('/api/jobs/progress');
@@ -85,74 +248,6 @@ export default function App() {
   useEffect(() => {
     fetchData();
   }, []);
-
-  const fetchData = async () => {
-    try {
-      // 1. Obtener Detección de Hardware
-      const gpuRes = await fetch('/api/detect-hardware');
-      const gpuData = await gpuRes.json();
-      setGpuInfo(gpuData);
-
-      // 2. Obtener Ajustes
-      const settingsRes = await fetch('/api/settings');
-      const settingsData = await settingsRes.json();
-      setSettings(settingsData);
-
-      // 3. Obtener Perfiles
-      const profilesRes = await fetch('/api/profiles');
-      const profilesData = await profilesRes.json();
-      setProfiles(profilesData);
-
-      // 4. Obtener Plantillas
-      const templatesRes = await fetch('/api/templates');
-      const templatesData = await templatesRes.json();
-      setTemplates(templatesData);
-
-      // 5. Refrescar Videos de Fondo
-      refreshBackgroundVideos(settingsData.backgroundFolder);
-
-      // 6. Verificar actualización silenciosa de fondo al arrancar si está habilitado (Estilo OBS Studio)
-      if (settingsData.autoCheckUpdate !== false) {
-        performUpdateCheck(settingsData).then(info => {
-          if (info && info.hasUpdate) {
-            // Si el usuario eligió "Omitir esta versión", no molestar al inicio para esa versión específica
-            if (settingsData.skippedVersion && settingsData.skippedVersion === info.latestVersion) {
-              return;
-            }
-            setUpdateInfo(info);
-            setShowUpdateModal(true);
-          }
-        }).catch(() => {});
-      }
-    } catch (err) {
-      console.error('Error cargando datos iniciales:', err);
-    }
-  };
-
-  const refreshBackgroundVideos = async (folder, profileId) => {
-    try {
-      let targetFolder = folder;
-      if (!targetFolder && profileId && Array.isArray(profiles) && profiles.length > 0) {
-        const prof = profiles.find(p => p.id === profileId);
-        if (prof && prof.backgroundFolder) {
-          targetFolder = prof.backgroundFolder;
-        }
-      }
-      if (!targetFolder && settings?.backgroundFolder) {
-        targetFolder = settings.backgroundFolder;
-      }
-
-      const res = await fetch('/api/background/status', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folder: targetFolder || '', profileId: profileId || '' })
-      });
-      const data = await res.json();
-      setBackgroundStatus(data || { count: 0, totalDuration: 0, files: [], playhead: {} });
-    } catch (err) {
-      console.error('Error al consultar videos de fondo:', err);
-    }
-  };
 
   const handleSaveSettings = async (newSettings) => {
     try {
@@ -442,101 +537,6 @@ export default function App() {
       case 'integrations': return 'Integraciones & Actualizaciones';
       default: return 'Reddit Studio Desktop';
     }
-  };
-
-  const performUpdateCheck = async (customSettings = null) => {
-    const currentVer = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0';
-    
-    // 1. Intentar consultar a través del backend local
-    try {
-      const res = await fetch('/api/updates/check');
-      if (res.ok) {
-        const info = await res.json();
-        if (info && (info.hasUpdate !== undefined || info.currentVersion)) {
-          return info;
-        }
-      }
-    } catch (localErr) {
-      console.log('Backend local no disponible para updates, consultando GitHub directamente...');
-    }
-
-    // 2. Fallback: Consultar directamente la API de GitHub desde el cliente
-    try {
-      const cfg = customSettings || settings || {};
-      const repo = cfg.githubRepo || 'Leonardo-murataya/reddit-desktop';
-      const token = cfg.githubToken || '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';
-      const headers = {
-        'Accept': 'application/vnd.github+json',
-        'Authorization': `Bearer ${token}`
-      };
-
-      const compareVersions = (v1, v2) => {
-        const p1 = (v1 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
-        const p2 = (v2 || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0);
-        for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
-          const num1 = p1[i] || 0;
-          const num2 = p2[i] || 0;
-          if (num1 > num2) return 1;
-          if (num1 < num2) return -1;
-        }
-        return 0;
-      };
-
-      const [releasesRes, tagsRes] = await Promise.allSettled([
-        fetch(`https://api.github.com/repos/${repo}/releases`, { headers }),
-        fetch(`https://api.github.com/repos/${repo}/tags`, { headers })
-      ]);
-
-      const releases = releasesRes.status === 'fulfilled' && releasesRes.value.ok ? await releasesRes.value.json() : [];
-      const tags = tagsRes.status === 'fulfilled' && tagsRes.value.ok ? await tagsRes.value.json() : [];
-
-      const sortedReleases = Array.isArray(releases) ? releases.sort((a, b) => compareVersions(b.tag_name, a.tag_name)) : [];
-      const sortedTags = Array.isArray(tags) ? tags.sort((a, b) => compareVersions(b.name, a.name)) : [];
-
-      const topRelease = sortedReleases[0];
-      const topTag = sortedTags[0]?.name?.replace(/^v/, '');
-
-      let latestTag = currentVer;
-      let matchingRel = topRelease;
-
-      if (topTag && compareVersions(topTag, latestTag) > 0) {
-        latestTag = topTag;
-        const foundRel = sortedReleases.find(r => (r.tag_name || '').replace(/^v/, '') === topTag);
-        if (foundRel) matchingRel = foundRel;
-      } else if (topRelease) {
-        const relTag = (topRelease.tag_name || '').replace(/^v/, '');
-        if (compareVersions(relTag, latestTag) > 0) {
-          latestTag = relTag;
-        }
-      }
-
-      const hasUpdate = compareVersions(latestTag, currentVer) > 0;
-      return {
-        hasUpdate,
-        currentVersion: currentVer,
-        latestVersion: latestTag,
-        releaseTitle: matchingRel?.name || `Reddit Video Generator v${latestTag}`,
-        releaseNotes: matchingRel?.body || 'Nueva versión disponible con mejoras de rendimiento, arquitectura autónoma y correcciones.',
-        publishedAt: matchingRel?.published_at || new Date().toISOString(),
-        releaseUrl: matchingRel?.html_url || `https://github.com/${repo}/releases/tag/v${latestTag}`,
-        githubToken: token,
-        assets: (matchingRel?.assets || []).map(a => ({
-          id: a.id,
-          name: a.name,
-          size: a.size,
-          apiUrl: a.url,
-          downloadUrl: a.browser_download_url
-        }))
-      };
-    } catch (ghErr) {
-      console.error('Error al conectar con GitHub directamente:', ghErr);
-    }
-
-    return {
-      hasUpdate: false,
-      currentVersion: currentVer,
-      error: 'No se pudo conectar con los servidores de GitHub para buscar actualizaciones. Verifica tu conexión a internet.'
-    };
   };
 
   const handleCheckUpdatesManually = async () => {

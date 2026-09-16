@@ -138,16 +138,16 @@ export default function ProfileChainModal({ isOpen, onClose, profiles = [], temp
   };
 
   // Calcular numeración previa acumulada para preview
-  let globalOffset = 1;
   const profileRanges = profiles
     .filter(p => selected[p.id])
-    .map(p => {
+    .reduce((acc, p) => {
       const count = counts[p.id] || 1;
-      const from = globalOffset;
-      const to = globalOffset + count - 1;
-      globalOffset += count;
-      return { profileId: p.id, from, to, count };
-    });
+      const prevEnd = acc.length > 0 ? acc[acc.length - 1].to : 0;
+      const from = prevEnd + 1;
+      const to = prevEnd + count;
+      acc.push({ profileId: p.id, from, to, count });
+      return acc;
+    }, []);
 
   const getRange = (profileId) => profileRanges.find(r => r.profileId === profileId);
 

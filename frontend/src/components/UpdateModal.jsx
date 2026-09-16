@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Sparkles, Download, Clock, X, CheckCircle2, Package, AlertTriangle, Loader2, ShieldCheck, Zap, Check, ExternalLink, ArrowRight, Ban } from 'lucide-react';
+import { useState } from 'react';
+import { Sparkles, Clock, X, CheckCircle2, AlertTriangle, Loader2, ShieldCheck, Zap, Check, ArrowRight, Ban } from 'lucide-react';
 
 export default function UpdateModal({ updateInfo, onClose }) {
   const [downloadingAsset, setDownloadingAsset] = useState(null);
@@ -11,8 +11,6 @@ export default function UpdateModal({ updateInfo, onClose }) {
 
   if (!updateInfo) return null;
 
-  const defaultToken = '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';
-  const token = updateInfo.githubToken || defaultToken;
   const isUpToDate = !updateInfo.hasUpdate && !updateInfo.error && !updateInfo.loading;
   const primaryAsset = updateInfo.assets && updateInfo.assets.length > 0 ? updateInfo.assets[0] : null;
 
@@ -58,7 +56,9 @@ export default function UpdateModal({ updateInfo, onClose }) {
             setTimeout(() => {
               try {
                 window.close();
-              } catch (e) {}
+              } catch {
+                // Fallback si la ventana no permite cierre programático directo
+              }
             }, 1200);
             return;
           }

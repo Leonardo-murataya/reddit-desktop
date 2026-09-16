@@ -30,7 +30,9 @@ if (isTauriEnv) {
           const targetUrl = `${BACKEND_ORIGIN}${url.pathname}${url.search}`;
           resource = new Request(targetUrl, resource);
         }
-      } catch (e) {}
+      } catch {
+        // Fallback defensivo si falla el parsing de URL
+      }
     }
     return originalFetch.call(this, resource, init);
   };

@@ -271,11 +271,25 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     return () => {
       try {
         document.head.removeChild(link);
-      } catch (e) {
+      } catch {
         // Ignorar si ya fue removido
       }
     };
   }, []);
+
+  const checkMusicFileExists = async (filePath) => {
+    if (!filePath) {
+      setMusicFileExists(true);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/utils/file-exists?path=${encodeURIComponent(filePath)}`);
+      const data = await res.json();
+      setMusicFileExists(data.exists);
+    } catch {
+      setMusicFileExists(false);
+    }
+  };
 
   // Controladores de simulación de video cronológico
   const [previewState, setPreviewState] = useState('idle'); // 'idle' | 'intro' | 'static' | 'outro' | 'subtitles'
@@ -518,20 +532,6 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setMultiVoicePromptExtension('Si la historia contiene interacciones o confrontaciones entre múltiples personas, reescribe el campo "content" no como un monólogo continuo, sino como un diálogo dramático y dinámico donde participen los distintos personajes (ej. Clara, Sofía, Alejandro). Devuelve el campo "content" como una lista (array de objetos) en formato JSON estructurado llamado "dialogues" en lugar de la cadena de texto tradicional. Cada objeto del diálogo debe tener: "role" (narrator para la protagonista, o el nombre del personaje secundario como "alejandro", "sofia"), "text" (la frase corta que dice, máximo 15 palabras sin repetir nombres), y "gender" (male o female para ese personaje). Asegúrate de que las confrontaciones se sientan intensas y los diálogos sean breves y de alta retención.');
 
     setPreviewState('idle');
-  };
-
-  const checkMusicFileExists = async (filePath) => {
-    if (!filePath) {
-      setMusicFileExists(true);
-      return;
-    }
-    try {
-      const res = await fetch(`/api/utils/file-exists?path=${encodeURIComponent(filePath)}`);
-      const data = await res.json();
-      setMusicFileExists(data.exists);
-    } catch (err) {
-      setMusicFileExists(false);
-    }
   };
 
   const handlePickMusicFile = async () => {
@@ -1004,7 +1004,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     const offX = (watermarkImageOffsetX !== undefined ? watermarkImageOffsetX : 20) * 0.14;
     const offY = (watermarkImageOffsetY !== undefined ? watermarkImageOffsetY : 20) * 0.14;
     
-    let positionStyle = {};
+    let positionStyle;
     let topVal = 'auto', bottomVal = 'auto', leftVal = 'auto', rightVal = 'auto', transformVal = '';
     
     if (align === 7 || align === 8 || align === 9) {

@@ -1,19 +1,24 @@
 const fs = require('fs');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const ffprobe = require('ffprobe-static');
 const ffmpegStatic = require('ffmpeg-static');
 
 /**
- * Obtiene la duración exacta de un archivo de audio usando ffprobe.
+ * Obtiene la duración exacta de un archivo de audio usando ffprobe de forma segura.
  * @param {string} filePath - Ruta del archivo
  * @returns {number} Duración en segundos
  */
 function getAudioDuration(filePath) {
   try {
-    const cmd = `"${ffprobe.path}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${filePath}"`;
-    const output = execSync(cmd, { encoding: 'utf8' }).trim();
+    const args = [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ];
+    const output = execFileSync(ffprobe.path, args, { encoding: 'utf8' }).trim();
     const duration = parseFloat(output);
     return isNaN(duration) ? 0 : duration;
   } catch (error) {
@@ -212,8 +217,15 @@ async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options
       fs.writeFileSync(concatListPath, fileEntries, 'utf8');
 
       // Ejecutar ffmpeg para concatenar re-codificando a MP3 de alta fidelidad, uniendo PCM continuo y eliminando delays de decodificación
-      const cmd = `"${ffmpegStatic}" -y -f concat -safe 0 -i "${concatListPath}" -c:a libmp3lame -b:a 192k "${outputAudioPath}"`;
-      execSync(cmd, { stdio: 'ignore' });
+      execFileSync(ffmpegStatic, [
+        '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', concatListPath,
+        '-c:a', 'libmp3lame',
+        '-b:a', '192k',
+        outputAudioPath
+      ], { stdio: 'ignore' });
 
       // Limpieza de archivos temporales
       fs.unlinkSync(concatListPath);
@@ -310,8 +322,15 @@ function concatAudioFiles(filePaths, outputPath) {
     const fileEntries = filePaths.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
     fs.writeFileSync(concatListPath, fileEntries, 'utf8');
 
-    const cmd = `"${ffmpegStatic}" -y -f concat -safe 0 -i "${concatListPath}" -c:a libmp3lame -b:a 192k "${outputPath}"`;
-    execSync(cmd, { stdio: 'ignore' });
+    execFileSync(ffmpegStatic, [
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', concatListPath,
+      '-c:a', 'libmp3lame',
+      '-b:a', '192k',
+      outputPath
+    ], { stdio: 'ignore' });
 
     // Limpieza de archivos temporales
     fs.unlinkSync(concatListPath);

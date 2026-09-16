@@ -97,23 +97,55 @@ const INITIAL_DB = {
 function readDb() {
   try {
     if (!fs.existsSync(DB_PATH)) {
-      fs.writeFileSync(DB_PATH, JSON.stringify(INITIAL_DB, null, 2), 'utf8');
+      writeDb(INITIAL_DB);
       return INITIAL_DB;
     }
     const data = fs.readFileSync(DB_PATH, 'utf8');
     return JSON.parse(data);
   } catch (error) {
-    console.error('Error reading local db.json:', error);
+    console.error('Error reading local db.json:', error.message);
+    const bakPath = DB_PATH + '.bak';
+    if (fs.existsSync(bakPath)) {
+      try {
+        console.warn('Intentando recuperar base de datos desde copia de seguridad .bak...');
+        const bakData = fs.readFileSync(bakPath, 'utf8');
+        const parsed = JSON.parse(bakData);
+        // Restaurar archivo principal desde el backup
+        writeDb(parsed);
+        return parsed;
+      } catch (bakError) {
+        console.error('Error al recuperar desde backup .bak:', bakError.message);
+      }
+    }
     return INITIAL_DB;
   }
 }
 
 function writeDb(data) {
+  const tempPath = `${DB_PATH}.${Date.now()}_${Math.random().toString(36).substring(2, 6)}.tmp`;
+  const bakPath = DB_PATH + '.bak';
   try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
+    const jsonStr = JSON.stringify(data, null, 2);
+    // 1. Escribir primero en archivo temporal
+    fs.writeFileSync(tempPath, jsonStr, 'utf8');
+
+    // 2. Si el archivo actual existe y no está vacío, actualizar el backup .bak
+    if (fs.existsSync(DB_PATH)) {
+      try {
+        fs.copyFileSync(DB_PATH, bakPath);
+      } catch (copyErr) {
+        // No bloquear la escritura principal si falla el backup
+      }
+    }
+
+    // 3. Renombrado atómico en el sistema de archivos (reemplazo in-place infalible)
+    fs.renameSync(tempPath, DB_PATH);
     return true;
   } catch (error) {
-    console.error('Error writing to local db.json:', error);
+    console.error('Error writing atomically to local db.json:', error);
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch (cleanErr) {}
     return false;
   }
 }
@@ -122,3 +154,4 @@ module.exports = {
   readDb,
   writeDb
 };
+
