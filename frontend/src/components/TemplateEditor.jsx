@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Plus, Trash2, Palette, Volume2, Type, Move, Upload, Eye, Zap, Play, RotateCcw, VolumeX, Sparkles, Download, Shield, Music, AlertTriangle, FolderOpen, Users, Info } from 'lucide-react';
+import { Save, Plus, Trash2, Palette, Volume2, Type, Move, Upload, Eye, Zap, Play, RotateCcw, VolumeX, Sparkles, Download, Shield, Music, AlertTriangle, FolderOpen, Users, Info, Layers, Film, Clock, Square } from 'lucide-react';
 import AwardPickerModal from './AwardPickerModal';
+import LiveCanvasStage from './LiveCanvasStage';
 import { useUIModal } from '../context/UIModalContext';
 
 const EDGE_VOICES = [
@@ -25,10 +26,24 @@ const FONTS = [
 const ANIMATIONS = [
   { value: 'tiktok-pop', label: 'TikTok Pop (Palabra a la vez, escala y resalte rápido)' },
   { value: 'bounce-pop', label: 'Bounce Pop (Palabra a la vez, efecto rebote elástico)' },
+  { value: 'kinetic-wave', label: 'Kinetic Wave (Onda cinética con micro-giro, estilo Drift)' },
+  { value: 'typewriter', label: 'Typewriter (Máquina de escribir cinemática rápida)' },
+  { value: 'neon-glow', label: 'Neon Glow (Resplandor de neón de alto impacto)' },
+  { value: 'slide-up', label: 'Slide Up (Deslizamiento ascendente fluido)' },
   { value: 'borde-emergente-2', label: 'Borde Emergente II (Caja Capcut con Borde de Color)' },
   { value: 'active-highlight', label: 'Active Highlight (Bloque frase, ilumina activa)' },
   { value: 'glow-karaoke', label: 'Glow Karaoke (Frase bloque con brillo neón contorno)' },
   { value: 'clean-fade', label: 'Clean Fade (Bloque de texto con fundido suave)' }
+];
+
+const STYLE_PACKS = [
+  { id: 'hormozi', name: 'Viral Hormozi', icon: '🔥', font: 'Bangers', color: '#FFFF00', passive: '#FFFFFF', anim: 'tiktok-pop', border: 'heavy-outline' },
+  { id: 'drift', name: 'Drift Kinetic', icon: '⚡', font: 'Montserrat', color: '#00FFFF', passive: '#FFFFFF', anim: 'kinetic-wave', border: 'outline' },
+  { id: 'capcut', name: 'Capcut Box II', icon: '🎬', font: 'Arial Bold', color: '#FFFFFF', passive: '#D1D5DB', anim: 'borde-emergente-2', border: 'box' },
+  { id: 'neon', name: 'Cyberpunk Neon', icon: '🕹️', font: 'Montserrat', color: '#FF007F', passive: '#FFFFFF', anim: 'neon-glow', border: 'outline' },
+  { id: 'typewriter', name: 'Typewriter', icon: '📜', font: 'Arial Bold', color: '#FACC15', passive: '#E2E8F0', anim: 'typewriter', border: 'outline' },
+  { id: 'slide', name: 'Slide Up', icon: '🚀', font: 'Trebuchet MS', color: '#38BDF8', passive: '#FFFFFF', anim: 'slide-up', border: 'outline' },
+  { id: 'minimal', name: 'Minimalist Clean', icon: '💎', font: 'Arial Bold', color: '#FFFFFF', passive: '#94A3B8', anim: 'clean-fade', border: 'outline' }
 ];
 
 const BORDER_STYLES = [
@@ -223,6 +238,15 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   const [previewOrientation, setPreviewOrientation] = useState('9:16'); // '9:16' | '16:9'
   const [includeApiKeyInExport, setIncludeApiKeyInExport] = useState(false);
 
+  // Estados para el Gizmo de Arrastre Directo en Pantalla (Drift Transform Gizmo)
+  const previewContainerRef = useRef(null);
+  const [activeDragTarget, setActiveDragTarget] = useState(null); // 'subtitles' | 'card' | null
+  const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
+  const [dragInitialOffsets, setDragInitialOffsets] = useState({ x: 0, y: 0 });
+  const [isSnappedX, setIsSnappedX] = useState(false);
+  const [isSnappedY, setIsSnappedY] = useState(false);
+  const [isHoveredTarget, setIsHoveredTarget] = useState(null); // 'subtitles' | 'card' | null
+
   // Estados de la marca de agua
   const [watermarkEnabled, setWatermarkEnabled] = useState(false);
   const [watermarkText, setWatermarkText] = useState('@marca_agua');
@@ -261,6 +285,32 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   const [multiVoicePromptExtension, setMultiVoicePromptExtension] = useState(
     'Si la historia contiene interacciones o confrontaciones entre múltiples personas, reescribe el campo "content" no como un monólogo continuo, sino como un diálogo dramático y dinámico donde participen los distintos personajes (ej. Clara, Sofía, Alejandro). Devuelve el campo "content" como una lista (array de objetos) en formato JSON estructurado llamado "dialogues" en lugar de la cadena de texto tradicional. Cada objeto del diálogo debe tener: "role" (narrator para la protagonista, o el nombre del personaje secundario como "alejandro", "sofia"), "text" (la frase corta que dice, máximo 15 palabras sin repetir nombres), y "gender" (male o female para ese personaje). Asegúrate de que las confrontaciones se sientan intensas y los diálogos sean breves y de alta retención.'
   );
+
+  // Estados de Efectos Cinemáticos y SFX estilo Drift
+  const [cardSfxEnabled, setCardSfxEnabled] = useState(false);
+  const [cardSfxSound, setCardSfxSound] = useState('whoosh'); // 'whoosh' | 'pop' | 'slam' | 'ding'
+  const [cardSfxVolume, setCardSfxVolume] = useState(-6);
+  const [backgroundBlur, setBackgroundBlur] = useState(0);
+  const [backgroundBlurMode, setBackgroundBlurMode] = useState('card-only'); // 'card-only' | 'all'
+  const [vignetteStrength, setVignetteStrength] = useState(0);
+  const [backgroundSaturation, setBackgroundSaturation] = useState(1.15);
+  const [backgroundContrast, setBackgroundContrast] = useState(1.05);
+
+  // Estados de la Línea de Tiempo Multitrack (Drift Studio)
+  const [isPlayingTimeline, setIsPlayingTimeline] = useState(false);
+  const [timelineProgress, setTimelineProgress] = useState(0); // 0% a 100%
+  const timelineRafRef = useRef(null);
+
+  // Reproductor de preescucha SFX
+  const playSfxPreview = (soundName = cardSfxSound) => {
+    try {
+      const audio = new Audio(`/assets/sfx/${soundName}.wav`);
+      audio.volume = Math.min(1, Math.max(0, Math.pow(10, cardSfxVolume / 20)));
+      audio.play().catch(e => console.warn('[SFX Preview] Error al reproducir audio:', e.message));
+    } catch (err) {
+      console.warn('[SFX Preview] Error creando Audio:', err);
+    }
+  };
 
   // Cargar dinámicamente la fuente Bangers de Google Fonts para la previsualización en vivo
   useEffect(() => {
@@ -393,6 +443,16 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setMultiVoiceSecondaryMale2(active.multiVoiceSecondaryMale2 || 'es-MX-JorgeNeural');
         setMultiVoiceMaxVoices(active.multiVoiceMaxVoices !== undefined ? active.multiVoiceMaxVoices : 4);
         setMultiVoicePromptExtension(active.multiVoicePromptExtension !== undefined ? active.multiVoicePromptExtension : 'Si la historia contiene interacciones o confrontaciones entre múltiples personas, reescribe el campo "content" no como un monólogo continuo, sino como un diálogo dramático y dinámico donde participen los distintos personajes (ej. Clara, Sofía, Alejandro). Devuelve el campo "content" como una lista (array de objetos) en formato JSON estructurado llamado "dialogues" en lugar de la cadena de texto tradicional. Cada objeto del diálogo debe tener: "role" (narrator para la protagonista, o el nombre del personaje secundario como "alejandro", "sofia"), "text" (la frase corta que dice, máximo 15 palabras sin repetir nombres), y "gender" (male o female para ese personaje). Asegúrate de que las confrontaciones se sientan intensas y los diálogos sean breves y de alta retención.');
+
+        // Cargar efectos cinemáticos y SFX estilo Drift
+        setCardSfxEnabled(active.cardSfxEnabled !== undefined ? active.cardSfxEnabled : false);
+        setCardSfxSound(active.cardSfxSound || 'whoosh');
+        setCardSfxVolume(active.cardSfxVolume !== undefined ? active.cardSfxVolume : -6);
+        setBackgroundBlur(active.backgroundBlur !== undefined ? active.backgroundBlur : 0);
+        setBackgroundBlurMode(active.backgroundBlurMode || 'card-only');
+        setVignetteStrength(active.vignetteStrength !== undefined ? active.vignetteStrength : 0);
+        setBackgroundSaturation(active.backgroundSaturation !== undefined ? active.backgroundSaturation : 1.15);
+        setBackgroundContrast(active.backgroundContrast !== undefined ? active.backgroundContrast : 1.05);
     }
   }, [selectedId, templates]);
 
@@ -416,41 +476,102 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     return () => clearInterval(interval);
   }, [testSubtitleText, previewState]);
 
-  // Limpiar timers en desmontaje
+  // Limpiar timers y animación RAF en desmontaje
   useEffect(() => {
     return () => {
       timelineTimeoutRef.current.forEach(clearTimeout);
+      if (timelineRafRef.current) cancelAnimationFrame(timelineRafRef.current);
     };
   }, []);
 
   const handleStartTimelineSimulation = () => {
     timelineTimeoutRef.current.forEach(clearTimeout);
     timelineTimeoutRef.current = [];
+    if (timelineRafRef.current) cancelAnimationFrame(timelineRafRef.current);
 
     setPreviewState('intro');
     setActiveWordIndex(0);
+    setIsPlayingTimeline(true);
+    setTimelineProgress(0);
+
+    if (cardSfxEnabled) {
+      playSfxPreview();
+    }
+
+    const tEntry = (parseFloat(cardEntryDuration) || 0.4) * 1000;
+    const tStatic = 2000;
+    const tExit = (parseFloat(cardExitDuration) || 0.4) * 1000;
+    const tSubs = 2500;
+    const totalDuration = tEntry + tStatic + tExit + tSubs;
+    const simStartTime = Date.now();
+
+    const loopRaf = () => {
+      const elapsed = Date.now() - simStartTime;
+      const progress = Math.min(100, (elapsed / totalDuration) * 100);
+      setTimelineProgress(progress);
+      if (progress < 100) {
+        timelineRafRef.current = requestAnimationFrame(loopRaf);
+      }
+    };
+    timelineRafRef.current = requestAnimationFrame(loopRaf);
 
     const t1 = setTimeout(() => {
       setPreviewState('static');
-    }, cardEntryDuration * 1000);
+    }, tEntry);
     timelineTimeoutRef.current.push(t1);
 
     const t2 = setTimeout(() => {
       setPreviewState('outro');
-    }, (cardEntryDuration + 2.0) * 1000);
+    }, tEntry + tStatic);
     timelineTimeoutRef.current.push(t2);
 
     const t3 = setTimeout(() => {
       setPreviewState('subtitles');
-    }, (cardEntryDuration + 2.0 + cardExitDuration) * 1000);
+    }, tEntry + tStatic + tExit);
     timelineTimeoutRef.current.push(t3);
+
+    const t4 = setTimeout(() => {
+      setIsPlayingTimeline(false);
+      setTimelineProgress(100);
+      if (timelineRafRef.current) cancelAnimationFrame(timelineRafRef.current);
+    }, totalDuration);
+    timelineTimeoutRef.current.push(t4);
   };
 
   const handleResetTimelineSimulation = () => {
     timelineTimeoutRef.current.forEach(clearTimeout);
     timelineTimeoutRef.current = [];
+    if (timelineRafRef.current) cancelAnimationFrame(timelineRafRef.current);
     setPreviewState('idle');
     setActiveWordIndex(0);
+    setIsPlayingTimeline(false);
+    setTimelineProgress(0);
+  };
+
+  const handleScrubTimeline = (pct) => {
+    timelineTimeoutRef.current.forEach(clearTimeout);
+    timelineTimeoutRef.current = [];
+    if (timelineRafRef.current) cancelAnimationFrame(timelineRafRef.current);
+    setIsPlayingTimeline(false);
+    const clamped = Math.max(0, Math.min(100, pct));
+    setTimelineProgress(clamped);
+
+    const tEntry = (parseFloat(cardEntryDuration) || 0.4) * 1000;
+    const tStatic = 2000;
+    const tExit = (parseFloat(cardExitDuration) || 0.4) * 1000;
+    const tSubs = 2500;
+    const totalDuration = tEntry + tStatic + tExit + tSubs;
+    const currentMs = (clamped / 100) * totalDuration;
+
+    if (currentMs < tEntry) {
+      setPreviewState('intro');
+    } else if (currentMs < tEntry + tStatic) {
+      setPreviewState('static');
+    } else if (currentMs < tEntry + tStatic + tExit) {
+      setPreviewState('outro');
+    } else {
+      setPreviewState('subtitles');
+    }
   };
 
   const handleCreateNew = () => {
@@ -531,7 +652,18 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setMultiVoiceMaxVoices(4);
     setMultiVoicePromptExtension('Si la historia contiene interacciones o confrontaciones entre múltiples personas, reescribe el campo "content" no como un monólogo continuo, sino como un diálogo dramático y dinámico donde participen los distintos personajes (ej. Clara, Sofía, Alejandro). Devuelve el campo "content" como una lista (array de objetos) en formato JSON estructurado llamado "dialogues" en lugar de la cadena de texto tradicional. Cada objeto del diálogo debe tener: "role" (narrator para la protagonista, o el nombre del personaje secundario como "alejandro", "sofia"), "text" (la frase corta que dice, máximo 15 palabras sin repetir nombres), y "gender" (male o female para ese personaje). Asegúrate de que las confrontaciones se sientan intensas y los diálogos sean breves y de alta retención.');
 
+    // Resetear cinemática y SFX
+    setCardSfxEnabled(false);
+    setCardSfxSound('whoosh');
+    setCardSfxVolume(-6);
+    setBackgroundBlur(0);
+    setBackgroundBlurMode('card-only');
+    setVignetteStrength(0);
+    setBackgroundSaturation(1.15);
+    setBackgroundContrast(1.05);
+
     setPreviewState('idle');
+    setIsPlayingTimeline(false);
   };
 
   const handlePickMusicFile = async () => {
@@ -771,7 +903,100 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       setSubtitleOffsetX(0);
       setSubtitleOffsetY(0);
     }
+    showToast('Posición de subtítulos centrada (0, 0)', 'info');
   };
+
+  // Aplicar Pack de Estilo Rápido (Drift Style Packs)
+  const applyStylePack = (pack) => {
+    if (!pack) return;
+    if (pack.font) setFont(pack.font);
+    if (pack.color) setSubtitleColor(pack.color);
+    if (pack.passive) setPassiveColor(pack.passive);
+    if (pack.anim) setAnimation(pack.anim);
+    if (pack.border) setSubtitleBorderStyle(pack.border);
+    showToast(`Pack de estilo "${pack.name}" aplicado.`, 'success');
+  };
+
+  // Manejadores de eventos del Gizmo de arrastre directo (Inspirado en Drift TransformGizmo)
+  const handleSubtitlePointerDown = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setActiveDragTarget('subtitles');
+    setDragStartPos({ x: e.clientX, y: e.clientY });
+    const currX = previewOrientation === '16:9' ? subtitleOffsetX_16_9 : subtitleOffsetX;
+    const currY = previewOrientation === '16:9' ? subtitleOffsetY_16_9 : subtitleOffsetY;
+    setDragInitialOffsets({ x: currX, y: currY });
+  };
+
+  const handleCardPointerDown = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setActiveDragTarget('card');
+    setDragStartPos({ x: e.clientX, y: e.clientY });
+    const currX = previewOrientation === '16:9' ? cardOffsetX_16_9 : cardOffsetX;
+    const currY = previewOrientation === '16:9' ? cardOffsetY_16_9 : cardOffsetY;
+    setDragInitialOffsets({ x: currX, y: currY });
+  };
+
+  useEffect(() => {
+    if (!activeDragTarget) return;
+
+    const handlePointerMove = (e) => {
+      if (!previewContainerRef.current) return;
+      const rect = previewContainerRef.current.getBoundingClientRect();
+      const isLand = previewOrientation === '16:9';
+      const trueWidth = isLand ? 1920 : 1080;
+      const scale = rect.width / trueWidth;
+
+      const deltaX = (e.clientX - dragStartPos.x) / scale;
+      const deltaY = (e.clientY - dragStartPos.y) / scale;
+
+      let targetX = Math.round(dragInitialOffsets.x + deltaX);
+      let targetY = Math.round(dragInitialOffsets.y + deltaY);
+
+      // Snap magnético inteligente al centro (tolerancia de 20px de video)
+      const snapThreshold = 20;
+      const snappedX = Math.abs(targetX) < snapThreshold;
+      const snappedY = Math.abs(targetY) < snapThreshold;
+
+      if (snappedX) targetX = 0;
+      if (snappedY) targetY = 0;
+
+      setIsSnappedX(snappedX);
+      setIsSnappedY(snappedY);
+
+      if (activeDragTarget === 'subtitles') {
+        if (isLand) {
+          setSubtitleOffsetX_16_9(targetX);
+          setSubtitleOffsetY_16_9(targetY);
+        } else {
+          setSubtitleOffsetX(targetX);
+          setSubtitleOffsetY(targetY);
+        }
+      } else if (activeDragTarget === 'card') {
+        if (isLand) {
+          setCardOffsetX_16_9(targetX);
+          setCardOffsetY_16_9(targetY);
+        } else {
+          setCardOffsetX(targetX);
+          setCardOffsetY(targetY);
+        }
+      }
+    };
+
+    const handlePointerUp = () => {
+      setActiveDragTarget(null);
+      setIsSnappedX(false);
+      setIsSnappedY(false);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [activeDragTarget, dragStartPos, dragInitialOffsets, previewOrientation]);
 
   const handleGenerateVoicePreview = async () => {
     if (!previewTestText.trim()) return;
@@ -905,7 +1130,17 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       multiVoiceSecondaryMale1,
       multiVoiceSecondaryMale2,
       multiVoiceMaxVoices: parseInt(multiVoiceMaxVoices),
-      multiVoicePromptExtension
+      multiVoicePromptExtension,
+
+      // Efectos Cinemáticos y SFX estilo Drift
+      cardSfxEnabled,
+      cardSfxSound,
+      cardSfxVolume: parseInt(cardSfxVolume),
+      backgroundBlur: parseInt(backgroundBlur),
+      backgroundBlurMode,
+      vignetteStrength: parseFloat(vignetteStrength),
+      backgroundSaturation: parseFloat(backgroundSaturation),
+      backgroundContrast: parseFloat(backgroundContrast)
     });
 
     if (saved && saved.id) {
@@ -1167,10 +1402,133 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Editor de Parámetros (Columna Izquierda - 7/12) */}
-        <div className="lg:col-span-7 space-y-6">
-          <form onSubmit={handleSaveSubmit} className="glass-panel rounded-2xl p-6 space-y-6">
+      {/* Selector de Plantillas Horizontal en Píldoras (Estilo imagenes ai) */}
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
+        {templates.map(tpl => (
+          <button
+            key={tpl.id}
+            type="button"
+            onClick={() => setSelectedId(tpl.id)}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border flex items-center gap-2 ${
+              selectedId === tpl.id
+                ? 'bg-amber-500 text-slate-950 border-amber-500 shadow-md shadow-amber-500/20 font-black'
+                : 'bg-slate-900/80 hover:bg-slate-800 text-slate-300 border-slate-800'
+            }`}
+          >
+            <span>🎴 {tpl.name}</span>
+            <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono ${selectedId === tpl.id ? 'bg-black/20 text-slate-950 font-bold' : 'bg-slate-800 text-slate-400'}`}>
+              {tpl.exportFormat || '9:16'}
+            </span>
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={handleCreateNew}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border flex items-center gap-1.5 ${
+            selectedId === 'new'
+              ? 'bg-amber-500 text-slate-950 border-amber-500 font-black'
+              : 'bg-slate-950 hover:bg-slate-900 text-amber-400 border-amber-500/30'
+          }`}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>Nueva Plantilla</span>
+        </button>
+      </div>
+
+      {/* ÁREA DE ESTUDIO DOMINANTE: LIENZO EN VIVO 1:1 & TIMELINE MULTITRACK */}
+      <LiveCanvasStage
+        previewOrientation={previewOrientation}
+        setPreviewOrientation={setPreviewOrientation}
+        cardTheme={cardTheme}
+        cardType={cardType}
+        cardUsername={cardUsername}
+        cardSubreddit={cardSubreddit}
+        cardAvatar={cardAvatar}
+        upvotes={upvotes}
+        comments={comments}
+        cardShowVerified={cardShowVerified}
+        cardShowAwards={cardShowAwards}
+        cardSelectedAwards={cardSelectedAwards}
+        cardWidth={cardWidth}
+        cardBorderRadius={cardBorderRadius}
+        cardPadding={cardPadding}
+        cardGap={cardGap}
+        cardScale={cardScale}
+        cardOffsetX={cardOffsetX}
+        cardOffsetY={cardOffsetY}
+        setCardOffsetX={setCardOffsetX}
+        setCardOffsetY={setCardOffsetY}
+        cardScale_16_9={cardScale_16_9}
+        cardOffsetX_16_9={cardOffsetX_16_9}
+        cardOffsetY_16_9={cardOffsetY_16_9}
+        setCardOffsetX_16_9={setCardOffsetX_16_9}
+        setCardOffsetY_16_9={setCardOffsetY_16_9}
+        cardEntryAnimation={cardEntryAnimation}
+        cardExitAnimation={cardExitAnimation}
+        cardEntryDuration={cardEntryDuration}
+        cardExitDuration={cardExitDuration}
+        handleResetPosition={handleResetPosition}
+        font={font}
+        fontSize={fontSize}
+        fontSize_16_9={fontSize_16_9}
+        subtitleColor={subtitleColor}
+        passiveColor={passiveColor}
+        animation={animation}
+        subtitleBorderStyle={subtitleBorderStyle}
+        subtitleLetterSpacing={subtitleLetterSpacing}
+        subtitleOffsetX={subtitleOffsetX}
+        subtitleOffsetY={subtitleOffsetY}
+        setSubtitleOffsetX={setSubtitleOffsetX}
+        setSubtitleOffsetY={setSubtitleOffsetY}
+        subtitleOffsetX_16_9={subtitleOffsetX_16_9}
+        subtitleOffsetY_16_9={subtitleOffsetY_16_9}
+        setSubtitleOffsetX_16_9={setSubtitleOffsetX_16_9}
+        setSubtitleOffsetY_16_9={setSubtitleOffsetY_16_9}
+        handleResetSubtitlePosition={handleResetSubtitlePosition}
+        testTitle={testTitle}
+        testSubtitleText={testSubtitleText}
+        setTestSubtitleText={setTestSubtitleText}
+        cardSfxEnabled={cardSfxEnabled}
+        cardSfxSound={cardSfxSound}
+        cardSfxVolume={cardSfxVolume}
+        backgroundBlur={backgroundBlur}
+        backgroundBlurMode={backgroundBlurMode}
+        vignetteStrength={vignetteStrength}
+        backgroundSaturation={backgroundSaturation}
+        backgroundContrast={backgroundContrast}
+        playSfxPreview={playSfxPreview}
+        watermarkEnabled={watermarkEnabled}
+        watermarkType={watermarkType}
+        watermarkText={watermarkText}
+        watermarkFont={watermarkFont}
+        watermarkSize={watermarkSize}
+        watermarkColor={watermarkColor}
+        watermarkOpacity={watermarkOpacity}
+        watermarkAlignment={watermarkAlignment}
+        watermarkOffsetX={watermarkOffsetX}
+        watermarkOffsetY={watermarkOffsetY}
+        watermarkAnimation={watermarkAnimation}
+        watermarkSpeed={watermarkSpeed}
+        watermarkImageFile={watermarkImageFile}
+        watermarkImageScale={watermarkImageScale}
+        watermarkImageOpacity={watermarkImageOpacity}
+        watermarkImageAlignment={watermarkImageAlignment}
+        watermarkImageOffsetX={watermarkImageOffsetX}
+        watermarkImageOffsetY={watermarkImageOffsetY}
+        musicEnabled={musicEnabled}
+        musicVolume={musicVolume}
+        previewState={previewState}
+        isPlayingTimeline={isPlayingTimeline}
+        timelineProgress={timelineProgress}
+        handleStartTimelineSimulation={handleStartTimelineSimulation}
+        handleResetTimelineSimulation={handleResetTimelineSimulation}
+        handleScrubTimeline={handleScrubTimeline}
+        stylePacks={STYLE_PACKS}
+        applyStylePack={applyStylePack}
+      />
+
+      {/* PANELES DE INSPECCIÓN Y CONFIGURACIÓN MODULAR (FULL WIDTH) */}
+      <form onSubmit={handleSaveSubmit} className="glass-panel rounded-2xl p-6 space-y-6 w-full shadow-2xl">
             
             {/* Selección de plantilla */}
             <div className="flex items-center gap-4 border-b border-border-dark pb-4">
@@ -1324,6 +1682,18 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
               >
                 <Users className="w-4 h-4" />
                 <span>6. Multivoz</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('effects')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                  activeTab === 'effects' 
+                    ? 'bg-purple-500/10 text-purple-400 border border-purple-500/25 shadow-lg' 
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-purple-400" />
+                <span>7. Cinemática & SFX</span>
               </button>
             </div>
 
@@ -1673,7 +2043,32 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
             {/* CONTENIDO PESTAÑA SUBTÍTULOS */}
             {activeTab === 'subtitles' && (
               <div className="space-y-6 animate-[pFadeIn_0.2s_ease-out]">
-                
+
+                {/* 1. Packs de Estilo Rápido (1 Clic) - Inspirado en Drift StylePacks */}
+                <div className="space-y-3 bg-gradient-to-r from-amber-500/10 via-black/40 to-cyan-500/10 border border-amber-500/25 p-4 rounded-2xl">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-black text-amber-400 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>Packs de Estilo Rápido (1 Clic)</span>
+                    </span>
+                    <span className="text-[10px] text-gray-400 font-medium">Estilos de retención inspirados en Drift & Capcut</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2">
+                    {STYLE_PACKS.map(pack => (
+                      <button
+                        key={pack.id}
+                        type="button"
+                        onClick={() => applyStylePack(pack)}
+                        className="flex flex-col items-center justify-center p-2 rounded-xl bg-black/50 border border-white/10 hover:border-amber-400 hover:bg-amber-500/10 transition-all text-center cursor-pointer group active:scale-95 shadow-sm"
+                      >
+                        <span className="text-lg group-hover:scale-125 transition-transform">{pack.icon}</span>
+                        <span className="text-[10px] font-black text-gray-200 mt-1 truncate max-w-full">{pack.name}</span>
+                        <span className="text-[8px] text-gray-400 truncate max-w-full">{pack.anim}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* 2. Tipografía y Estilo */}
                 <div className="space-y-4">
                   <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2 border-b border-border-dark pb-2">
@@ -2622,6 +3017,195 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
               </div>
             )}
 
+            {/* CONTENIDO PESTAÑA CINEMÁTICA Y EFECTOS SFX (DRIFT SUITE) */}
+            {activeTab === 'effects' && (
+              <div className="space-y-6 animate-[pFadeIn_0.2s_ease-out]">
+                {/* 1. Efectos de Sonido (SFX Sync) */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-border-dark pb-2">
+                    <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2">
+                      <Volume2 className="w-4 h-4 text-amber-400" />
+                      <span>Efectos de Sonido (SFX Sincronizados)</span>
+                    </h3>
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={cardSfxEnabled}
+                        onChange={(e) => setCardSfxEnabled(e.target.checked)}
+                        className="rounded border-gray-700 bg-gray-900 text-amber-500 focus:ring-0 cursor-pointer w-4 h-4"
+                      />
+                      <span className="text-xs font-bold text-gray-300">Activar Sonido al Entrar Tarjeta</span>
+                    </label>
+                  </div>
+
+                  {cardSfxEnabled && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/20 p-4 rounded-xl border border-border-dark">
+                      <div className="space-y-1">
+                        <label className="block text-[10px] font-bold text-gray-400 uppercase">Sonido de Impacto / Entrada</label>
+                        <div className="flex gap-2">
+                          <select
+                            value={cardSfxSound}
+                            onChange={(e) => {
+                              setCardSfxSound(e.target.value);
+                              playSfxPreview(e.target.value);
+                            }}
+                            className="flex-1 bg-black/40 border border-border-dark rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
+                          >
+                            <option value="whoosh">💨 Whoosh (Deslizamiento Rápido)</option>
+                            <option value="pop">🎯 Pop (Impacto Seco y Limpio)</option>
+                            <option value="slam">💥 Slam / Thud (Golpe Cinematográfico)</option>
+                            <option value="ding">🔔 Ding / Chime (Campana Suave)</option>
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => playSfxPreview(cardSfxSound)}
+                            className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+                            title="Escuchar sonido"
+                          >
+                            <Play className="w-3.5 h-3.5 fill-current" />
+                            <span>Probar</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase">
+                          <span>Volumen SFX</span>
+                          <span className="text-amber-400 font-mono">{cardSfxVolume} dB</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-24"
+                          max="0"
+                          step="1"
+                          value={cardSfxVolume}
+                          onChange={(e) => setCardSfxVolume(parseInt(e.target.value))}
+                          className="w-full accent-amber-400 h-1.5 bg-gray-800 rounded-lg cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 2. Tratamiento y Desenfoque del Fondo (Background Blur) */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2 border-b border-border-dark pb-2">
+                    <Sparkles className="w-4 h-4 text-cyan-400" />
+                    <span>Desenfoque y Tratamiento Cinematográfico del Fondo</span>
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-black/20 p-4 rounded-xl border border-border-dark">
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase">
+                        <span>Desenfoque de Fondo (Gaussian Blur)</span>
+                        <span className="text-cyan-400 font-mono">{backgroundBlur} px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="16"
+                        step="1"
+                        value={backgroundBlur}
+                        onChange={(e) => setBackgroundBlur(parseInt(e.target.value))}
+                        className="w-full accent-cyan-400 h-1.5 bg-gray-800 rounded-lg cursor-pointer"
+                      />
+                      <span className="text-[9px] text-gray-500">0 = Nítido, 4-8 = Estética cine suave, 12-16 = Desenfoque intenso</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase">Modo de Aplicación del Desenfoque</label>
+                      <select
+                        value={backgroundBlurMode}
+                        onChange={(e) => setBackgroundBlurMode(e.target.value)}
+                        className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2 text-xs text-white font-bold focus:outline-none focus:border-cyan-400"
+                      >
+                        <option value="card-only">Solo mientras la Tarjeta está en pantalla (Recomendado)</option>
+                        <option value="all">Durante todo el video continuo</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Viñeta y Color Grading (Estilo Drift) */}
+                <div className="space-y-4">
+                  <h3 className="text-xs font-bold text-gray-300 uppercase tracking-wider flex items-center gap-2 border-b border-border-dark pb-2">
+                    <Palette className="w-4 h-4 text-purple-400" />
+                    <span>Viñeta y Color Grading (Vibrancia Viral)</span>
+                  </h3>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/20 p-4 rounded-xl border border-border-dark">
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase">
+                        <span>Viñeta Perimetral</span>
+                        <span className="text-purple-400 font-mono">{Math.round(vignetteStrength * 100)}%</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.05"
+                        value={vignetteStrength}
+                        onChange={(e) => setVignetteStrength(parseFloat(e.target.value))}
+                        className="w-full accent-purple-400 h-1.5 bg-gray-800 rounded-lg cursor-pointer"
+                      />
+                      <span className="text-[9px] text-gray-500">Oscurece sutilmente las esquinas</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase">
+                        <span>Saturación del Fondo</span>
+                        <span className="text-purple-400 font-mono">{backgroundSaturation.toFixed(2)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.8"
+                        max="1.6"
+                        step="0.05"
+                        value={backgroundSaturation}
+                        onChange={(e) => setBackgroundSaturation(parseFloat(e.target.value))}
+                        className="w-full accent-purple-400 h-1.5 bg-gray-800 rounded-lg cursor-pointer"
+                      />
+                      <span className="text-[9px] text-gray-500">1.15x recomendado para TikTok</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase">
+                        <span>Contraste del Fondo</span>
+                        <span className="text-purple-400 font-mono">{backgroundContrast.toFixed(2)}x</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.9"
+                        max="1.3"
+                        step="0.02"
+                        value={backgroundContrast}
+                        onChange={(e) => setBackgroundContrast(parseFloat(e.target.value))}
+                        className="w-full accent-purple-400 h-1.5 bg-gray-800 rounded-lg cursor-pointer"
+                      />
+                      <span className="text-[9px] text-gray-500">1.05x realza sombras y luces</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBackgroundBlur(0);
+                        setBackgroundBlurMode('card-only');
+                        setVignetteStrength(0);
+                        setBackgroundSaturation(1.15);
+                        setBackgroundContrast(1.05);
+                        showToast('Valores de cinemática restablecidos.', 'info');
+                      }}
+                      className="text-[10px] font-bold text-gray-400 hover:text-white underline cursor-pointer"
+                    >
+                      Restablecer filtros a valores por defecto
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* BOTONES ACCIÓN */}
             <div className="flex gap-4 border-t border-border-dark pt-6 justify-end">
               {selectedId && selectedId !== 'new' && (
@@ -2645,453 +3229,6 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
             </div>
 
           </form>
-        </div>
-
-        {/* Previsualización en Vivo de la Tarjeta y el Subtítulo (Columna Derecha - 5/12) */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="glass-panel rounded-2xl p-4 flex flex-col items-center gap-4 h-full min-h-[540px] relative overflow-hidden bg-gradient-to-b from-gray-900 to-black">
-            
-            {/* Cabecera sección */}
-            <div className="w-full border-b border-border-dark pb-2 flex flex-col items-center shrink-0">
-              <span className="text-[10px] font-black text-gray-300 uppercase tracking-wider flex items-center justify-center gap-1.5">
-                <Eye className="w-3.5 h-3.5 text-brand-primary" />
-                <span>Previa en Vivo</span>
-              </span>
-            </div>
-
-            {/* Aspect Ratio Simulator Toggle */}
-            <div className="w-full shrink-0 flex items-center justify-between bg-black/40 rounded-xl p-1.5 border border-border-dark">
-              <span className="text-[10px] font-bold text-gray-400 ml-2 uppercase">Previsualizar Aspect Ratio:</span>
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPreviewOrientation('9:16')}
-                  className={`px-3 py-1 text-[9px] font-black rounded-lg transition-all cursor-pointer uppercase ${
-                    previewOrientation === '9:16'
-                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
-                  }`}
-                >
-                  9:16 Vertical
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPreviewOrientation('16:9')}
-                  className={`px-3 py-1 text-[9px] font-black rounded-lg transition-all cursor-pointer uppercase ${
-                    previewOrientation === '16:9'
-                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 shadow'
-                      : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
-                  }`}
-                >
-                  16:9 Horizontal
-                </button>
-              </div>
-            </div>
-
-            {/* Controles de Simulación Premium */}
-            <div className="flex gap-3 w-full shrink-0">
-              <button
-                type="button"
-                onClick={handleStartTimelineSimulation}
-                className="flex-1 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:brightness-110 active:scale-[0.98] text-white font-black py-2 px-3 rounded-xl text-[10px] transition-all cursor-pointer shadow-lg shadow-orange-500/10"
-              >
-                <Zap className="w-3.5 h-3.5 fill-current" />
-                <span>Reproducir Animación Secuencial</span>
-              </button>
-              {previewState !== 'idle' && (
-                <button
-                  type="button"
-                  onClick={handleResetTimelineSimulation}
-                  className="flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white p-2 rounded-xl border border-border-dark cursor-pointer text-[10px] transition-all"
-                  title="Reiniciar a Vista Estática"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-
-            {/* Monitor de Estado Simulador */}
-            <div className="w-full bg-black/60 rounded-xl px-3 py-1.5 text-center shrink-0 border border-border-dark flex justify-between items-center">
-              <span className="text-[9px] font-bold text-gray-500">ESTADO DEL VIDEO:</span>
-              <span className={`text-[10px] font-black uppercase tracking-wide px-2 py-0.5 rounded ${
-                previewState === 'idle' ? 'bg-gray-800 text-gray-300' :
-                previewState === 'intro' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' :
-                previewState === 'static' ? 'bg-green-500/10 text-green-400 border border-green-500/20' :
-                previewState === 'outro' ? 'bg-orange-500/10 text-orange-400 border border-orange-500/20' :
-                'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'
-              }`}>
-                {previewState === 'idle' ? 'Edición Estática' :
-                 previewState === 'intro' ? 'Entrada del Card' :
-                 previewState === 'static' ? 'Título en Pantalla' :
-                 previewState === 'outro' ? 'Salida del Card' :
-                 'Card Oculto + Subtítulos Corriendo'}
-              </span>
-            </div>
-
-            {/* Simulación del layout vertical 9:16 o horizontal 16:9 */}
-            <div 
-              className={`rounded-2xl bg-gray-950 border-2 border-gray-800 shadow-2xl relative flex flex-col justify-between p-3 overflow-hidden shrink-0 select-none transition-all duration-300 ${
-                previewOrientation === '16:9' ? 'w-[380px] h-[215px]' : 'w-[230px] h-[395px]'
-              }`}
-            >
-              
-              {/* Fondo del juego simulado */}
-              <div className="absolute inset-0 bg-gradient-to-tr from-indigo-900/30 via-slate-900/40 to-teal-900/30 opacity-70 z-0"></div>
-              
-              {/* Línea de cuadrícula para centrado del simulador */}
-              <div className="absolute inset-0 border border-white/5 pointer-events-none z-0"></div>
-
-              {/* Marca de agua simulada */}
-              {watermarkEnabled && (
-                watermarkType === 'image' ? (
-                  <div style={getWatermarkImageStyle()}>
-                    📷 LOGO_WM
-                  </div>
-                ) : (
-                  <div style={getWatermarkStyle()}>
-                    {watermarkText}
-                  </div>
-                )
-              )}
-
-              {/* Animaciones CSS locales para la marca de agua */}
-              <style>{`
-                @keyframes watermark-bounce-sim {
-                  0% { top: 10%; left: 10%; }
-                  25% { top: 75%; left: 60%; }
-                  50% { top: 10%; left: 60%; }
-                  75% { top: 75%; left: 10%; }
-                  100% { top: 10%; left: 10%; }
-                }
-                @keyframes watermark-wobble-sim {
-                  0%, 100% { transform: rotate(-5deg) scale(1); }
-                  50% { transform: rotate(5deg) scale(1.05); }
-                }
-              `}</style>
-
-              {/* CARD DE REDDIT INTERACTIVA (CON DESPLAZAMIENTO SCALADO EN VIVO Y CONTROL DE TIMELINE) */}
-              {previewState !== 'subtitles' && (
-                <div 
-                  className={`z-10 w-full transition-transform duration-100 ease-out flex justify-center items-center h-full absolute inset-0 p-4 ${getCardAnimClass()}`}
-                  style={{ 
-                    transform: `translate(${
-                      (previewOrientation === '16:9' ? cardOffsetX_16_9 : cardOffsetX) * 0.14
-                    }px, ${
-                      (previewOrientation === '16:9' ? cardOffsetY_16_9 : cardOffsetY) * 0.14
-                    }px) scale(${
-                      previewOrientation === '16:9' ? cardScale_16_9 : cardScale
-                    })` 
-                  }}
-                >
-                  <div 
-                    style={{
-                      width: `${cardWidth}px`,
-                      borderRadius: `${cardBorderRadius}px`,
-                      padding: `${cardPadding}px`,
-                      gap: `${cardGap}px`,
-                      backgroundColor: cardTheme === 'dark' ? '#1c1c1e' : '#ffffff',
-                      borderColor: cardTheme === 'dark' ? '#2c2c2e' : '#edeff1',
-                      color: cardTheme === 'dark' ? '#e5e5e7' : '#11151a'
-                    }}
-                    className="border shadow-xl flex flex-col font-sans select-none overflow-hidden transition-all duration-300"
-                  >
-                    {/* Header */}
-                    <div className="flex items-start gap-1.5">
-                      <div className="relative w-9 h-9 shrink-0 overflow-hidden rounded-full">
-                        <img 
-                          className="absolute w-full h-full object-cover" 
-                          src={(() => {
-                            if (!cardAvatar) return '/assets/reddit-avatar.png';
-                            if (cardAvatar.startsWith('data:image/')) return cardAvatar;
-                            if (cardAvatar.startsWith('/avatars/')) return `${window.__BACKEND_URL__ || 'http://127.0.0.1:31826'}${cardAvatar}`;
-                            return cardAvatar;
-                          })()} 
-                          alt="avatar" 
-                          onError={(e) => { 
-                            if (!e.target.src.includes('reddit-avatar.png')) {
-                              e.target.src = '/assets/reddit-avatar.png';
-                            }
-                          }}
-                        />
-                      </div>
-                      <div className="flex flex-col items-start gap-0.5">
-                        <div className="flex items-center gap-1">
-                          <span 
-                            style={{ color: cardTheme === 'dark' ? '#ffffff' : '#11151a' }}
-                            className="text-[12px] font-extrabold truncate max-w-[120px]"
-                          >
-                            {cardSubreddit}
-                          </span>
-                          {cardShowVerified && (
-                            <svg 
-                              viewBox="0 0 20 20" 
-                              fill="currentColor" 
-                              className="w-3.5 h-3.5 text-blue-500 inline shrink-0"
-                            >
-                              <path 
-                                fillRule="evenodd" 
-                                d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" 
-                                clipRule="evenodd" 
-                              />
-                            </svg>
-                          )}
-                        </div>
-                        <span 
-                          style={{ color: cardTheme === 'dark' ? '#94a3b8' : '#5c6c74' }}
-                          className="text-[9px] font-medium"
-                        >
-                          u/{cardUsername}
-                        </span>
-                      </div>
-                    </div>
-
-                    {cardShowAwards && (
-                      <div className="flex gap-2 mt-1 mb-1 items-center flex-wrap">
-                        {cardSelectedAwards && cardSelectedAwards.length > 0 ? (
-                          cardSelectedAwards.map((item, idx) => (
-                            <img key={idx} src={`/assets/awards/${item.file}`} alt={item.name} className="w-4 h-4 object-contain" />
-                          ))
-                        ) : (
-                          <img 
-                            src="/reddit-awards.png" 
-                            alt="awards" 
-                            className="h-[14px] w-auto object-contain block" 
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              const fallback = e.target.nextSibling;
-                              if (fallback) fallback.style.display = 'flex';
-                            }}
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    {/* Title */}
-                    <div 
-                      style={{ gap: `${cardGap * 1.5}px` }}
-                      className="flex flex-col mt-0.5"
-                    >
-                      <div 
-                        style={{ color: cardTheme === 'dark' ? '#ffffff' : '#11151a' }}
-                        className="text-[12px] font-extrabold leading-tight break-words"
-                      >
-                        {testTitle || 'Aquí se mostrará el título de la historia...'}
-                      </div>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="flex justify-between items-center gap-2 mt-1 select-none">
-                      <div className="flex items-center gap-2">
-                        {/* Upvotes (Heart SVG) */}
-                        <div 
-                          style={{ color: cardTheme === 'dark' ? '#94a3b8' : '#5c6c74' }}
-                          className="flex items-center gap-1 text-[9px] font-bold"
-                        >
-                          <svg className="w-3.5 h-3.5 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2">
-                            <path d="M12 21C13 21 22 16.0003 22 9.00046C22 5.5006 19 3.04408 16 3.00068C14.5 2.97897 13 3.50068 12 5.00062C11 3.50068 9.47405 3.00068 8 3.00068C5 3.00068 2 5.5006 2 9.00046C2 16.0003 11 21 12 21Z" strokeLinecap="round" strokeLinejoin="round"></path>
-                          </svg>
-                          <span>{upvotes}</span>
-                        </div>
-
-                        {/* Comments (Speech bubble SVG) */}
-                        <div 
-                          style={{ color: cardTheme === 'dark' ? '#94a3b8' : '#5c6c74' }}
-                          className="flex items-center gap-1 text-[9px] font-bold"
-                        >
-                          <svg className="w-3.5 h-3.5 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2">
-                            <path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 13.499 2.33015 14.921 2.9214 16.1973C3.38829 17.2052 3.83022 18.0644 3.50454 19.1977C3.34789 19.7429 2.95529 20.2798 2.90866 20.8475C2.85534 21.4967 3.42708 22.0228 4.06965 21.9157C5.3779 21.6977 6.0076 20.6574 7.52552 21.0144C7.69003 21.0531 8.11879 21.2065 8.97627 21.5132C9.88354 21.8377 10.8606 22 12 22Z" strokeLinecap="round" strokeLinejoin="round"></path>
-                          </svg>
-                          <span>{comments}</span>
-                        </div>
-                      </div>
-
-                      {/* Share */}
-                      <div 
-                        style={{ color: cardTheme === 'dark' ? '#94a3b8' : '#5c6c74' }}
-                        className="flex items-center gap-1 text-[9px] font-bold"
-                      >
-                        <svg className="w-3.5 h-3.5 stroke-current" viewBox="0 0 24 24" fill="none" strokeWidth="2">
-                          <path d="M8 10H7.5V10C6.10444 10 5.40666 10 4.83886 10.1722C3.56046 10.56 2.56004 11.5605 2.17224 12.8389C2 13.4067 2 14.1044 2 15.5V16C2 17.8638 2 18.7956 2.30448 19.5307C2.71046 20.5108 3.48915 21.2895 4.46927 21.6955C5.20435 22 6.13623 22 8 22L16 22C17.8638 22 18.7956 22 19.5307 21.6955C20.5108 21.2895 21.2895 20.5108 21.6955 19.5307C22 18.7956 22 17.8638 22 16V15.5C22 14.1044 22 13.4067 21.8278 12.8389C21.44 11.5605 20.4395 10.56 19.1611 10.1722C18.5933 10 17.8956 10 16.5 10V10H16M12 15V2M12 2L8 6M12 2L16 6" strokeLinecap="round" strokeLinejoin="round"></path>
-                        </svg>
-                        <span>Share</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* DEMO DE SUBTÍTULOS ANIMADOS EN VIVO (SE MUESTRAN EN IDLE O EXCLUSIVAMENTE DURANTE SU ESTADO DE TIMELINE) */}
-              {(previewState === 'subtitles' || previewState === 'idle') && (
-                <div 
-                  className={`z-20 absolute top-[50%] left-0 right-0 flex justify-center text-center px-4 pointer-events-none transition-transform duration-100 ease-out -translate-y-1/2 ${
-                    previewOrientation === '16:9' ? 'w-[65%] mx-auto inset-x-0' : 'w-full'
-                  }`}
-                  style={{ 
-                    // Cuando es 0,0 en la base de datos se centra totalmente.
-                    // En el simulador esto se logra colocándolo en top-[50%] y -translate-y-1/2, 
-                    // y luego desplazándolo proporcionalmente con la coordenada del usuario.
-                    transform: `translate(${
-                      (previewOrientation === '16:9' ? subtitleOffsetX_16_9 : subtitleOffsetX) * 0.14
-                    }px, ${
-                      (previewOrientation === '16:9' ? subtitleOffsetY_16_9 : subtitleOffsetY) * 0.14
-                    }px) translateY(-50%)` 
-                  }}
-                >
-                  {(animation === 'tiktok-pop' || animation === 'bounce-pop') && (
-                    <span 
-                      key={activeWordIndex}
-                      className={`font-extrabold uppercase shadow-sm filter tracking-wide inline-block ${
-                        animation === 'bounce-pop' ? 'animate-[bounce_0.25s_ease-in-out_infinite]' : 'scale-[1.12] transition-transform duration-100'
-                      }`}
-                      style={{ 
-                        fontFamily: font.split(' ')[0], 
-                        fontSize: `${previewOrientation === '16:9' ? (fontSize_16_9 / 100) * 11 : (fontSize / 100) * 12.5}px`, 
-                        letterSpacing: `${subtitleLetterSpacing}px`,
-                        color: subtitleColor,
-                        // Soporte premium para la caja de fondo o los bordes
-                        ...(subtitleBorderStyle === 'box' ? {
-                          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(255, 255, 255, 0.1)'
-                        } : getSubtitleShadowStyle())
-                      }}
-                    >
-                      {wordsList[activeWordIndex] || 'SUBTÍTULO'}
-                    </span>
-                  )}
-                  
-                  {(animation === 'active-highlight' || animation === 'glow-karaoke' || animation === 'borde-emergente-2') && (
-                    <div 
-                      className={`flex flex-wrap justify-center items-center gap-1.5 font-bold filter leading-tight ${
-                        subtitleBorderStyle === 'box' && animation !== 'borde-emergente-2' ? 'bg-black/75 px-3 py-2 rounded-xl border border-white/10' : ''
-                      }`}
-                      style={{ 
-                        fontFamily: font.split(' ')[0], 
-                        fontSize: `${previewOrientation === '16:9' ? (fontSize_16_9 / 100) * 10 : (fontSize / 100) * 11.5}px`,
-                        letterSpacing: `${subtitleLetterSpacing}px`,
-                        ...(animation !== 'borde-emergente-2' ? getSubtitleShadowStyle() : {})
-                      }}
-                    >
-                      {wordsList.map((w, idx) => {
-                        const isActive = idx === activeWordIndex;
-                        const wordText = animation === 'borde-emergente-2' ? w.toUpperCase() : w;
-                        if (isActive) {
-                          if (animation === 'borde-emergente-2') {
-                            return (
-                              <span 
-                                key={idx}
-                                style={{
-                                  color: '#FFFFFF',
-                                  backgroundColor: '#6C138E',
-                                  padding: '3px 4px',
-                                  borderRadius: '6px',
-                                  display: 'inline-block'
-                                }} 
-                                className="font-extrabold mx-0.5 text-center animate-[pFadeIn_0.1s_ease-out]"
-                              >
-                                {wordText}
-                              </span>
-                            );
-                          }
-                          return (
-                            <span 
-                              key={idx}
-                              style={
-                                animation === 'glow-karaoke' 
-                                  ? { color: subtitleColor, textShadow: `0px 0px 6px ${subtitleColor}`, transition: `all ${subtitleAnimationSpeed}ms ease` }
-                                  : { color: subtitleColor, transition: `all ${subtitleAnimationSpeed}ms ease` }
-                              } 
-                              className="font-extrabold mx-0.5"
-                            >
-                              {wordText}
-                            </span>
-                          );
-                        } else {
-                          if (animation === 'borde-emergente-2') {
-                            return (
-                              <span 
-                                key={idx}
-                                style={{
-                                  color: passiveColor,
-                                  backgroundColor: 'transparent',
-                                  padding: '3px 4px',
-                                  borderRadius: '6px',
-                                  display: 'inline-block'
-                                }} 
-                                className="font-extrabold mx-0.5 text-center"
-                              >
-                                {wordText}
-                              </span>
-                            );
-                          }
-                          return (
-                            <span 
-                              key={idx} 
-                              style={{ 
-                                color: passiveColor, 
-                                transition: `all ${subtitleAnimationSpeed}ms ease`,
-                                ...(animation === 'borde-emergente-2' ? getSubtitleShadowStyle() : {})
-                              }}
-                              className="font-extrabold mx-0.5"
-                            >
-                              {wordText}
-                            </span>
-                          );
-                        }
-                      })}
-                    </div>
-                  )}
-                  
-                  {animation === 'clean-fade' && (
-                    <span 
-                      className="font-medium tracking-wide leading-relaxed animate-pulse"
-                      style={{ 
-                        fontFamily: font.split(' ')[0], 
-                        fontSize: `${((previewOrientation === '16:9' ? fontSize_16_9 : fontSize) / 100) * 14}px`,
-                        letterSpacing: `${subtitleLetterSpacing}px`,
-                        color: passiveColor,
-                        ...(subtitleBorderStyle === 'box' ? {
-                          backgroundColor: 'rgba(0, 0, 0, 0.75)',
-                          padding: '6px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(255, 255, 255, 0.1)'
-                        } : getSubtitleShadowStyle())
-                      }}
-                    >
-                      {testSubtitleText}
-                    </span>
-                  )}
-                </div>
-              )}
-
-            </div>
-
-            {/* Input de Prueba del Card */}
-            <div className="w-full shrink-0 space-y-1">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase">Título de Prueba del Card:</label>
-              <input
-                type="text"
-                value={testTitle}
-                onChange={(e) => setTestTitle(e.target.value)}
-                className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-
-            {/* Input de Prueba del Subtítulo */}
-            <div className="w-full shrink-0 space-y-1">
-              <label className="block text-[10px] font-bold text-gray-400 uppercase">Texto de Prueba de Subtítulos:</label>
-              <input
-                type="text"
-                value={testSubtitleText}
-                onChange={(e) => setTestSubtitleText(e.target.value)}
-                className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-primary"
-              />
-            </div>
-
-          </div>
-        </div>
-      </div>
 
       {/* Modal Selector de Medallas (Awards) */}
       {showAwardPicker && (

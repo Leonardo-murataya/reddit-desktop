@@ -42,7 +42,15 @@
       "cardSubreddit": "r/AskReddit",
       "upvotes": "14.5k",
       "comments": "1.2k",
-      "showShare": true
+      "showShare": true,
+      "cardSfxEnabled": false,
+      "cardSfxSound": "whoosh",
+      "cardSfxVolume": -6,
+      "backgroundBlur": 0,
+      "backgroundBlurMode": "card-only",
+      "vignetteStrength": 0,
+      "backgroundSaturation": 1.15,
+      "backgroundContrast": 1.05
     }
   ],
   "timeline": {

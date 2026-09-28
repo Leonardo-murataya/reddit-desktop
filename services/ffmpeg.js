@@ -44,6 +44,14 @@ async function compileVideo(params, onProgress = () => {}) {
       musicEnabled = false,
       musicFile = '',
       musicVolume = -20,
+      cardSfxEnabled = false,
+      cardSfxSound = 'whoosh',
+      cardSfxVolume = -6,
+      backgroundBlur = 0,
+      backgroundBlurMode = 'card-only',
+      vignetteStrength = 0,
+      backgroundSaturation = 1.0,
+      backgroundContrast = 1.0,
       watermarkEnabled = false,
       watermarkType = 'text',
       watermarkImageFile = '',
@@ -111,18 +119,27 @@ async function compileVideo(params, onProgress = () => {}) {
     args.push('-i', titleAudioPath); // Entrada S+1
     args.push('-i', bodyAudioPath);  // Entrada S+2
 
+    let nextInputIdx = S + 3;
+    let musicInputIdx = -1;
     const hasMusic = musicEnabled && musicFile && fs.existsSync(musicFile);
     if (hasMusic) {
-      args.push('-stream_loop', '-1', '-i', musicFile); // Entrada S+3
+      args.push('-stream_loop', '-1', '-i', musicFile);
+      musicInputIdx = nextInputIdx++;
+    }
+
+    let sfxInputIdx = -1;
+    const possibleSfxPath = path.join(__dirname, '..', 'frontend', 'public', 'assets', 'sfx', `${cardSfxSound || 'whoosh'}.wav`);
+    const hasSfx = cardSfxEnabled && fs.existsSync(possibleSfxPath);
+    if (hasSfx) {
+      args.push('-i', possibleSfxPath);
+      sfxInputIdx = nextInputIdx++;
     }
 
     let watermarkInputIdx = -1;
-    let currentInputIdx = S + 3 + (hasMusic ? 1 : 0);
     const hasImgWatermark = watermarkEnabled && watermarkType === 'image' && watermarkImageFile && fs.existsSync(watermarkImageFile);
     if (hasImgWatermark) {
       args.push('-i', watermarkImageFile);
-      watermarkInputIdx = currentInputIdx;
-      currentInputIdx++;
+      watermarkInputIdx = nextInputIdx++;
     }
 
     // 4. Diseñar el filtro complejo (-filter_complex)
@@ -130,33 +147,58 @@ async function compileVideo(params, onProgress = () => {}) {
 
     // A. Concatenar y recortar videos de fondo
     if (S > 1) {
-      // Concatenamos los segmentos de fondo
       let concatInputs = '';
       for (let i = 0; i < S; i++) {
         concatInputs += `[${i}:v]`;
       }
       filterComplex += `${concatInputs}concat=n=${S}:v=1:a=0[v_bg_raw];`;
-      // Recorte adaptativo inteligente e infalible
       if (aspectRatio === '16:9') {
-        filterComplex += `[v_bg_raw]crop=w='if(gte(in_w/in_h, 16/9), in_h*16/9, in_w)':h='if(gte(in_w/in_h, 16/9), in_h, in_w*9/16)',scale=1920:1080:flags=bicubic[v_bg];`;
+        filterComplex += `[v_bg_raw]crop=w='if(gte(in_w/in_h, 16/9), in_h*16/9, in_w)':h='if(gte(in_w/in_h, 16/9), in_h, in_w*9/16)',scale=1920:1080:flags=bicubic[v_bg_base];`;
       } else {
-        filterComplex += `[v_bg_raw]crop=w='if(gte(in_w/in_h, 9/16), in_h*9/16, in_w)':h='if(gte(in_w/in_h, 9/16), in_h, in_w*16/9)',scale=1080:1920:flags=bicubic[v_bg];`;
+        filterComplex += `[v_bg_raw]crop=w='if(gte(in_w/in_h, 9/16), in_h*9/16, in_w)':h='if(gte(in_w/in_h, 9/16), in_h, in_w*16/9)',scale=1080:1920:flags=bicubic[v_bg_base];`;
       }
     } else {
-      // Un solo segmento: Recorte adaptativo inteligente e infalible
       if (aspectRatio === '16:9') {
-        filterComplex += `[0:v]crop=w='if(gte(in_w/in_h, 16/9), in_h*16/9, in_w)':h='if(gte(in_w/in_h, 16/9), in_h, in_w*9/16)',scale=1920:1080:flags=bicubic[v_bg];`;
+        filterComplex += `[0:v]crop=w='if(gte(in_w/in_h, 16/9), in_h*16/9, in_w)':h='if(gte(in_w/in_h, 16/9), in_h, in_w*9/16)',scale=1920:1080:flags=bicubic[v_bg_base];`;
       } else {
-        filterComplex += `[0:v]crop=w='if(gte(in_w/in_h, 9/16), in_h*9/16, in_w)':h='if(gte(in_w/in_h, 9/16), in_h, in_w*16/9)',scale=1080:1920:flags=bicubic[v_bg];`;
+        filterComplex += `[0:v]crop=w='if(gte(in_w/in_h, 9/16), in_h*9/16, in_w)':h='if(gte(in_w/in_h, 9/16), in_h, in_w*16/9)',scale=1080:1920:flags=bicubic[v_bg_base];`;
+      }
+    }
+
+    // A1. Tratamiento Cinematográfico del Fondo (Filtros Drift: Color Grading, Viñeta y Desenfoque)
+    let currentBgLabel = '[v_bg_base]';
+    const satVal = parseFloat(backgroundSaturation !== undefined ? backgroundSaturation : 1.0);
+    const conVal = parseFloat(backgroundContrast !== undefined ? backgroundContrast : 1.0);
+    if (satVal !== 1.0 || conVal !== 1.0) {
+      filterComplex += `${currentBgLabel}eq=saturation=${satVal}:contrast=${conVal}[v_bg_graded];`;
+      currentBgLabel = '[v_bg_graded]';
+    }
+
+    const vigVal = parseFloat(vignetteStrength !== undefined ? vignetteStrength : 0);
+    if (vigVal > 0) {
+      const vigAngle = (Math.max(0.01, Math.min(1.0, vigVal)) * (Math.PI / 2)).toFixed(4);
+      filterComplex += `${currentBgLabel}vignette=angle=${vigAngle}[v_bg_vig];`;
+      currentBgLabel = '[v_bg_vig]';
+    }
+
+    const blurVal = parseInt(backgroundBlur !== undefined ? backgroundBlur : 0);
+    if (blurVal > 0) {
+      if (backgroundBlurMode === 'all') {
+        filterComplex += `${currentBgLabel}gblur=sigma=${blurVal}[v_bg_blurred];`;
+        currentBgLabel = '[v_bg_blurred]';
+      } else {
+        // Modo adaptativo: Desenfoque únicamente mientras la tarjeta está en pantalla
+        filterComplex += `${currentBgLabel}split[bg_clear][bg_to_blur];`;
+        filterComplex += `[bg_to_blur]gblur=sigma=${blurVal}[bg_blurred_seg];`;
+        filterComplex += `[bg_clear][bg_blurred_seg]overlay=enable='between(t,0,${titleDuration})'[v_bg_adapt_blur];`;
+        currentBgLabel = '[v_bg_adapt_blur]';
       }
     }
 
     // A2. Aplicar escalado del card inteligente (HD con flags=lanczos y h=-2 para garantizar alto divisible por 2)
-    // El card original de Puppeteer es de ~1200px. Calculamos el ancho ideal según la orientación
-    // para que quepa perfectamente sin desbordarse ni recortarse a los lados, usando el multiplicador de escala del usuario.
     const baseCardWidth = aspectRatio === '16:9'
-      ? 1920 * 0.40 * activeCardScale  // ~768px de ancho en horizontal (40% de pantalla)
-      : 1080 * 0.74 * activeCardScale; // ~800px de ancho en vertical (74% de pantalla)
+      ? 1920 * 0.40 * activeCardScale
+      : 1080 * 0.74 * activeCardScale;
 
     let cardInputLabel = '[card_scaled]';
     filterComplex += `[${S}:v]scale=w=${Math.round(baseCardWidth)}:h=-2:flags=bicubic[card_scaled];`;
@@ -164,11 +206,9 @@ async function compileVideo(params, onProgress = () => {}) {
     // B. Procesar animaciones del card (Fades de entrada y salida)
     let cardLabel = cardInputLabel;
     
-    // Normalizar duraciones para evitar división por cero en fórmulas matemáticas de FFmpeg
     const safeEntryDuration = cardEntryDuration <= 0 ? 0.01 : cardEntryDuration;
     const safeExitDuration = cardExitDuration <= 0 ? 0.01 : cardExitDuration;
 
-    // Aplicamos fade de entrada y/o salida según la animación elegida
     const hasFadeIn = cardEntryAnimation === 'fade-in' || cardEntryAnimation === 'zoom-in';
     const hasFadeOut = cardExitAnimation === 'fade-out' || cardExitAnimation === 'zoom-out';
     
@@ -183,50 +223,51 @@ async function compileVideo(params, onProgress = () => {}) {
       cardLabel = '[card_processed]';
     }
 
-    // C. Calcular posicionamiento dinámico y animaciones de movimiento (Slide e Intro/Outro)
+    // C. Calcular posicionamiento dinámico y animaciones de movimiento con Curvas Bézier / Spring Physics
     let xExpr = `((W-w)/2)+${activeCardOffsetX}`;
     let yExpr = `((H-h)/2)+${activeCardOffsetY}`;
 
-    // Animaciones de entrada (primeros safeEntryDuration segundos)
+    // Progreso dinámico suave con interpolación sinusoidal (aceleración y desaceleración orgánica de Drift)
+    const easeInProg = `sin((t/${safeEntryDuration})*1.570796)`;
+    const exitStartTime = `(${titleDuration}-${safeExitDuration})`;
+    const easeOutProg = `(1-cos(((t-${exitStartTime})/${safeExitDuration})*1.570796))`;
+
     let entryX = `((W-w)/2)+${activeCardOffsetX}`;
     let entryY = `((H-h)/2)+${activeCardOffsetY}`;
 
     if (cardEntryAnimation === 'slide-in-left') {
-      entryX = `-w+(((W-w)/2)+${activeCardOffsetX}+w)*(t/${safeEntryDuration})`;
+      entryX = `-w+(((W-w)/2)+${activeCardOffsetX}+w)*${easeInProg}`;
     } else if (cardEntryAnimation === 'slide-in-right') {
-      entryX = `W-((W-(((W-w)/2)+${activeCardOffsetX}))*(t/${safeEntryDuration}))`;
+      entryX = `W-((W-(((W-w)/2)+${activeCardOffsetX}))*${easeInProg})`;
     } else if (cardEntryAnimation === 'slide-in-bottom') {
-      entryY = `H-((H-(((H-h)/2)+${activeCardOffsetY}))*(t/${safeEntryDuration}))`;
+      entryY = `H-((H-(((H-h)/2)+${activeCardOffsetY}))*${easeInProg})`;
     } else if (cardEntryAnimation === 'slide-in-top') {
-      entryY = `-h+(((H-h)/2)+${activeCardOffsetY}+h)*(t/${safeEntryDuration})`;
+      entryY = `-h+(((H-h)/2)+${activeCardOffsetY}+h)*${easeInProg}`;
     } else if (cardEntryAnimation === 'zoom-in') {
-      // Entrada elástica de zoom
-      entryY = `((H-h)/2)+${activeCardOffsetY} - (60 * (1 - (t/${safeEntryDuration})))`;
+      entryY = `((H-h)/2)+${activeCardOffsetY} - (60 * (1 - ${easeInProg}))`;
     }
 
-    // Animaciones de salida (últimos safeExitDuration segundos del titleDuration)
     let exitX = `((W-w)/2)+${activeCardOffsetX}`;
     let exitY = `((H-h)/2)+${activeCardOffsetY}`;
-    const exitStartTime = `(${titleDuration}-${safeExitDuration})`;
 
     if (cardExitAnimation === 'slide-out-left') {
-      exitX = `(((W-w)/2)+${activeCardOffsetX}) - w * ((t-${exitStartTime})/${safeExitDuration})`;
+      exitX = `(((W-w)/2)+${activeCardOffsetX}) - w * ${easeOutProg}`;
     } else if (cardExitAnimation === 'slide-out-right') {
-      exitX = `(((W-w)/2)+${activeCardOffsetX}) + W * ((t-${exitStartTime})/${safeExitDuration})`;
+      exitX = `(((W-w)/2)+${activeCardOffsetX}) + W * ${easeOutProg}`;
     } else if (cardExitAnimation === 'slide-out-bottom') {
-      exitY = `(((H-h)/2)+${activeCardOffsetY}) + H * ((t-${exitStartTime})/${safeExitDuration})`;
+      exitY = `(((H-h)/2)+${activeCardOffsetY}) + H * ${easeOutProg}`;
     } else if (cardExitAnimation === 'slide-out-top') {
-      exitY = `(((H-h)/2)+${activeCardOffsetY}) - H * ((t-${exitStartTime})/${safeExitDuration})`;
+      exitY = `(((H-h)/2)+${activeCardOffsetY}) - H * ${easeOutProg}`;
     } else if (cardExitAnimation === 'zoom-out') {
-      exitY = `(((H-h)/2)+${activeCardOffsetY}) + (60 * ((t-${exitStartTime})/${safeExitDuration}))`;
+      exitY = `(((H-h)/2)+${activeCardOffsetY}) + (60 * ${easeOutProg})`;
     }
 
-    // Unimos los 3 estados: entrada, estático y salida
+    // Unimos los 3 estados: entrada con easing, estático y salida con easing
     xExpr = `if(lt(t,${safeEntryDuration}), ${entryX}, if(gt(t,${exitStartTime}), ${exitX}, ((W-w)/2)+${activeCardOffsetX}))`;
     yExpr = `if(lt(t,${safeEntryDuration}), ${entryY}, if(gt(t,${exitStartTime}), ${exitY}, ((H-h)/2)+${activeCardOffsetY}))`;
 
-    // D. Superponer la tarjeta de Reddit (Title Card) durante el título de la historia
-    filterComplex += `[v_bg]${cardLabel}overlay=x='${xExpr}':y='${yExpr}':enable='between(t,0,${titleDuration})'[v_overlaid];`;
+    // D. Superponer la tarjeta de Reddit (Title Card) sobre el fondo tratado
+    filterComplex += `${currentBgLabel}${cardLabel}overlay=x='${xExpr}':y='${yExpr}':enable='between(t,0,${titleDuration})'[v_overlaid];`;
 
     // E. Quemar los subtítulos ASS sobre el video forzando codificación UTF-8 para acentos correctos en Windows
     const escapedSubPath = assSubtitlesPath.replace(/\\/g, '/').replace(/:/g, '\\:');
@@ -270,13 +311,24 @@ async function compileVideo(params, onProgress = () => {}) {
       filterComplex += `[v_overlaid]subtitles='${escapedSubPath}':charenc=UTF-8:fontsdir='${fontsDir}'[v_final];`;
     }
 
-    // F. Concatenar y mezclar los audios en orden (con música si está activa)
+    // F. Concatenar y mezclar los audios en orden (TTS + Música + Efectos de Sonido SFX)
+    filterComplex += `[${S+1}:a][${S+2}:a]concat=n=2:v=0:a=1[a_tts];`;
+    const mixAudioStreams = ['[a_tts]'];
+
     if (hasMusic) {
-      filterComplex += `[${S+1}:a][${S+2}:a]concat=n=2:v=0:a=1[a_tts];`;
-      filterComplex += `[${S+3}:a]volume=${musicVolume}dB[a_music_vol];`;
-      filterComplex += `[a_tts][a_music_vol]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[a_final]`;
+      filterComplex += `[${musicInputIdx}:a]volume=${musicVolume}dB[a_music_vol];`;
+      mixAudioStreams.push('[a_music_vol]');
+    }
+
+    if (hasSfx) {
+      filterComplex += `[${sfxInputIdx}:a]volume=${cardSfxVolume}dB[a_sfx_vol];`;
+      mixAudioStreams.push('[a_sfx_vol]');
+    }
+
+    if (mixAudioStreams.length > 1) {
+      filterComplex += `${mixAudioStreams.join('')}amix=inputs=${mixAudioStreams.length}:duration=first:dropout_transition=2:normalize=0[a_final]`;
     } else {
-      filterComplex += `[${S+1}:a][${S+2}:a]concat=n=2:v=0:a=1[a_final]`;
+      filterComplex += `[a_tts]anull[a_final]`;
     }
 
     args.push('-filter_complex', filterComplex);
@@ -287,37 +339,78 @@ async function compileVideo(params, onProgress = () => {}) {
     // Activar soporte multihilo completo para acelerar filtros de CPU (libass, crop, scale)
     args.push('-threads', '0');
 
-    // 6. Configurar el codificador de video de acuerdo a la GPU seleccionada (o autodetectada) con alto rendimiento y máxima fidelidad Full HD
-    if (activeCodec === 'h264_nvenc') {
-      // NVIDIA NVENC: Optimizado para renderizado ultra-rápido por hardware en tiempo récord
+    // 6. Configurar el codificador de video de acuerdo a la GPU seleccionada (o autodetectada) con perfiles optimizados de Drift
+    if (activeCodec === 'hevc_nvenc') {
+      // NVIDIA HEVC / H.265 (Ultra eficiencia y nitidez en 1080p vertical/horizontal)
+      args.push(
+        '-c:v', 'hevc_nvenc',
+        '-preset', 'p4',
+        '-tune', 'hq',
+        '-rc', 'vbr',
+        '-cq', '20',
+        '-spatial-aq', '1',
+        '-b:v', '10M',
+        '-maxrate:v', '20M',
+        '-bufsize:v', '20M',
+        '-pix_fmt', 'yuv420p'
+      );
+    } else if (activeCodec === 'h264_nvenc') {
+      // NVIDIA NVENC: H.264 acelerado por hardware CUDA
       args.push(
         '-c:v', 'h264_nvenc',
-        '-preset', 'p4', // Preset optimizado (p4 = velocidad/calidad balanceada ultra veloz)
+        '-preset', 'p4', // Preset optimizado (p4 = velocidad/calidad balanceada de estudio)
         '-tune', 'hq',
         '-profile:v', 'high',
         '-rc', 'vbr',
-        '-cq', '18', // Visualmente indistinguible de lossless en 1080p y hasta 3x más rápido
-        '-b:v', '15M',
-        '-maxrate:v', '30M',
-        '-bufsize:v', '30M',
+        '-cq', '18', // Máxima nitidez en 1080p
+        '-spatial-aq', '1',
+        '-b:v', '14M',
+        '-maxrate:v', '28M',
+        '-bufsize:v', '28M',
+        '-pix_fmt', 'yuv420p'
+      );
+    } else if (activeCodec === 'hevc_amf') {
+      // AMD AMF HEVC
+      args.push(
+        '-c:v', 'hevc_amf',
+        '-quality', 'balanced',
+        '-rc', 'vbr_peak',
+        '-b:v', '10M',
+        '-maxrate:v', '20M',
         '-pix_fmt', 'yuv420p'
       );
     } else if (activeCodec === 'h264_amf') {
       // AMD AMF: Aceleración balanceada para GPUs Radeon
       args.push(
         '-c:v', 'h264_amf',
-        '-quality', 'speed',
+        '-quality', 'balanced',
         '-rc', 'vbr_peak',
-        '-b:v', '15M',
-        '-maxrate:v', '30M',
+        '-b:v', '14M',
+        '-maxrate:v', '28M',
+        '-pix_fmt', 'yuv420p'
+      );
+    } else if (activeCodec === 'hevc_qsv') {
+      // Intel QuickSync HEVC
+      args.push(
+        '-c:v', 'hevc_qsv',
+        '-preset', 'medium',
+        '-global_quality', '20',
         '-pix_fmt', 'yuv420p'
       );
     } else if (activeCodec === 'h264_qsv') {
-      // Intel QuickSync: Aceleración por hardware para iGPU Intel
+      // Intel QuickSync H.264
       args.push(
         '-c:v', 'h264_qsv',
         '-preset', 'faster',
         '-global_quality', '18',
+        '-pix_fmt', 'yuv420p'
+      );
+    } else if (activeCodec === 'libx265') {
+      // CPU HEVC
+      args.push(
+        '-c:v', 'libx265',
+        '-preset', 'fast',
+        '-crf', '22',
         '-pix_fmt', 'yuv420p'
       );
     } else {
@@ -384,13 +477,17 @@ async function compileVideo(params, onProgress = () => {}) {
 
     let stderrAccumulator = '';
 
-    // FFmpeg reporta el progreso en stderr
+    // FFmpeg reporta el progreso y telemetría en stderr
     ffmpegProcess.stderr.on('data', (data) => {
       const text = data.toString();
       stderrAccumulator += text;
       
-      // Parsear la cadena de tiempo "time=HH:MM:SS.xx"
+      // Parsear la cadena de tiempo "time=HH:MM:SS.xx" y telemetría en tiempo real
       const timeMatch = text.match(/time=(\d{2}):(\d{2}):(\d{2})\.(\d{2})/);
+      const fpsMatch = text.match(/fps=\s*([\d.]+)/);
+      const speedMatch = text.match(/speed=\s*([\d.]+)x/);
+      const frameMatch = text.match(/frame=\s*(\d+)/);
+
       if (timeMatch) {
         const hrs = parseInt(timeMatch[1]);
         const mins = parseInt(timeMatch[2]);
@@ -400,7 +497,20 @@ async function compileVideo(params, onProgress = () => {}) {
         const currentSeconds = (hrs * 3600) + (mins * 60) + secs + (ms / 100);
         const percent = Math.min(100, Math.max(0, Math.round((currentSeconds / totalDuration) * 100)));
         
-        onProgress(percent);
+        const fps = fpsMatch ? parseFloat(fpsMatch[1]) : 0;
+        const speed = speedMatch ? parseFloat(speedMatch[1]) : 0;
+        const frame = frameMatch ? parseInt(frameMatch[1]) : 0;
+        const remainingSeconds = Math.max(0, totalDuration - currentSeconds);
+        const etaSeconds = speed > 0 ? Math.round(remainingSeconds / speed) : 0;
+
+        onProgress(percent, {
+          fps,
+          speed,
+          frame,
+          currentSeconds: Math.round(currentSeconds),
+          totalDuration: Math.round(totalDuration),
+          etaSeconds
+        });
       }
     });
 

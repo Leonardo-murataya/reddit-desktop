@@ -199,6 +199,72 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     });
   }
 
+  // Estilo 1b: Bounce Pop (Efecto rebote elástico por palabra, alta retención)
+  else if (animation === 'bounce-pop') {
+    const halfSpeed = Math.round(speed / 2);
+    timestamps.forEach((wt, idx) => {
+      const start = formatTimeASS(wt.start + startOffset);
+      const end = formatTimeASS(wt.end + startOffset);
+      
+      const cleanWord = wt.word.toUpperCase();
+      // El rebote utiliza dos transiciones consecutivas escaladas según el tiempo de velocidad
+      const text = `{\\pos(${X},${Y})\\fscx145\\fscy145\\c${assActiveColor}\\t(0, ${halfSpeed}, \\fscx92\\fscy92)\\t(${halfSpeed}, ${speed}, \\fscx100\\fscy100)}${cleanWord}`;
+      
+      assContent += `Dialogue: ${idx},${start},${end},Default,,0,0,0,,${text}\n`;
+    });
+  }
+
+  // Estilo 1d: Kinetic Wave (Onda cinética con micro-giro y oscilación orgánica, estilo Drift)
+  else if (animation === 'kinetic-wave') {
+    const halfSpeed = Math.max(30, Math.round(speed / 2));
+    timestamps.forEach((wt, idx) => {
+      const start = formatTimeASS(wt.start + startOffset);
+      const end = formatTimeASS(wt.end + startOffset);
+      const cleanWord = wt.word.toUpperCase();
+      
+      const text = `{\\pos(${X},${Y})\\frz-4\\fscx130\\fscy130\\c${assActiveColor}\\t(0, ${halfSpeed}, \\frz3\\fscx108\\fscy108)\\t(${halfSpeed}, ${speed}, \\frz0\\fscx100\\fscy100)}${cleanWord}`;
+      assContent += `Dialogue: ${idx},${start},${end},Default,,0,0,0,,${text}\n`;
+    });
+  }
+
+  // Estilo 1e: Typewriter (Máquina de escribir cinemática con revelado rápido y resalte de cursor)
+  else if (animation === 'typewriter') {
+    timestamps.forEach((wt, idx) => {
+      const start = formatTimeASS(wt.start + startOffset);
+      const end = formatTimeASS(wt.end + startOffset);
+      const cleanWord = wt.word.toUpperCase();
+      
+      // Aparición instantánea con fundido milimétrico y foco nítido
+      const text = `{\\pos(${X},${Y})\\fad(35,0)\\c${assActiveColor}\\fscx105\\fscy105}${cleanWord}`;
+      assContent += `Dialogue: ${idx},${start},${end},Default,,0,0,0,,${text}\n`;
+    });
+  }
+
+  // Estilo 1f: Neon Glow (Resplandor de neón de alto contraste y desenfoque perimetral para máxima visibilidad)
+  else if (animation === 'neon-glow') {
+    timestamps.forEach((wt, idx) => {
+      const start = formatTimeASS(wt.start + startOffset);
+      const end = formatTimeASS(wt.end + startOffset);
+      const cleanWord = wt.word.toUpperCase();
+      
+      const text = `{\\pos(${X},${Y})\\blur4\\3c${assActiveColor}\\c&H00FFFFFF&\\fscx120\\fscy120\\t(0, ${speed}, \\fscx100\\fscy100)}${cleanWord}`;
+      assContent += `Dialogue: ${idx},${start},${end},Karaoke,,0,0,0,,${text}\n`;
+    });
+  }
+
+  // Estilo 1g: Slide Up (Deslizamiento ascendente suave desde la base del cuadro)
+  else if (animation === 'slide-up') {
+    const slideOffset = isLandscape ? 35 : 45;
+    timestamps.forEach((wt, idx) => {
+      const start = formatTimeASS(wt.start + startOffset);
+      const end = formatTimeASS(wt.end + startOffset);
+      const cleanWord = wt.word.toUpperCase();
+      
+      const text = `{\\pos(${X},${Y + slideOffset})\\c${assActiveColor}\\fad(50,0)\\t(0, ${speed}, \\pos(${X},${Y}))}${cleanWord}`;
+      assContent += `Dialogue: ${idx},${start},${end},Default,,0,0,0,,${text}\n`;
+    });
+  }
+
   // Estilo 1c: Borde Emergente II (Caja morada plana sin borde blanco que emerge sobre la palabra de la frase en bloque sin zoom)
   else if (animation === 'borde-emergente-2') {
     const maxWordsPerPhrase = 4;

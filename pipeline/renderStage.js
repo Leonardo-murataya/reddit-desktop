@@ -43,6 +43,14 @@ async function executeRenderStage({
     musicEnabled: template.musicEnabled || false,
     musicFile: template.musicFile || '',
     musicVolume: template.musicVolume !== undefined ? template.musicVolume : -20,
+    cardSfxEnabled: template.cardSfxEnabled || false,
+    cardSfxSound: template.cardSfxSound || 'whoosh',
+    cardSfxVolume: template.cardSfxVolume !== undefined ? template.cardSfxVolume : -6,
+    backgroundBlur: template.backgroundBlur !== undefined ? template.backgroundBlur : 0,
+    backgroundBlurMode: template.backgroundBlurMode || 'card-only',
+    vignetteStrength: template.vignetteStrength !== undefined ? template.vignetteStrength : 0,
+    backgroundSaturation: template.backgroundSaturation !== undefined ? template.backgroundSaturation : 1.0,
+    backgroundContrast: template.backgroundContrast !== undefined ? template.backgroundContrast : 1.0,
     watermarkEnabled: template.watermarkEnabled || false,
     watermarkType: template.watermarkType || 'text',
     watermarkImageFile: template.watermarkImageFile || '',
@@ -77,15 +85,21 @@ async function executeRenderStage({
       cardOffsetY: template.cardOffsetY || 0,
       cardScale: template.cardScale !== undefined ? template.cardScale : 1.0,
       aspectRatio: '9:16'
-    }, (percent) => {
+    }, (percent, metrics) => {
       job.progress = Math.round(percent * 0.5);
+      if (metrics) {
+        job.gpuFps = metrics.fps;
+        job.renderSpeed = metrics.speed;
+        job.renderEta = metrics.etaSeconds;
+      }
       const shouldLog = (percent > 0 && percent !== lastLogged916);
       if (shouldLog) lastLogged916 = percent;
       broadcastProgress({
         type: 'progress',
         activeJob: job,
         percent: job.progress,
-        log: shouldLog ? `${videoNumStr} Progreso de codificación 9:16: ${percent}%` : null
+        metrics: metrics || null,
+        log: shouldLog ? `${videoNumStr} Progreso de codificación 9:16: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}` : null
       });
     });
 
@@ -110,15 +124,21 @@ async function executeRenderStage({
       cardOffsetY_16_9: template.cardOffsetY_16_9 !== undefined ? template.cardOffsetY_16_9 : 0,
       cardScale_16_9: template.cardScale_16_9 !== undefined ? template.cardScale_16_9 : 1.0,
       aspectRatio: '16:9'
-    }, (percent) => {
+    }, (percent, metrics) => {
       job.progress = 50 + Math.round(percent * 0.5);
+      if (metrics) {
+        job.gpuFps = metrics.fps;
+        job.renderSpeed = metrics.speed;
+        job.renderEta = metrics.etaSeconds;
+      }
       const shouldLog = (percent > 0 && percent !== lastLogged169);
       if (shouldLog) lastLogged169 = percent;
       broadcastProgress({
         type: 'progress',
         activeJob: job,
         percent: job.progress,
-        log: shouldLog ? `${videoNumStr} Progreso de codificación 16:9: ${percent}%` : null
+        metrics: metrics || null,
+        log: shouldLog ? `${videoNumStr} Progreso de codificación 16:9: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}` : null
       });
     });
 
@@ -156,15 +176,21 @@ async function executeRenderStage({
       cardOffsetY_16_9: template.cardOffsetY_16_9 !== undefined ? template.cardOffsetY_16_9 : 0,
       cardScale_16_9: template.cardScale_16_9 !== undefined ? template.cardScale_16_9 : 1.0,
       aspectRatio: isLandscape ? '16:9' : '9:16'
-    }, (percent) => {
+    }, (percent, metrics) => {
       job.progress = percent;
+      if (metrics) {
+        job.gpuFps = metrics.fps;
+        job.renderSpeed = metrics.speed;
+        job.renderEta = metrics.etaSeconds;
+      }
       const shouldLog = (percent > 0 && percent !== lastLoggedPercent);
       if (shouldLog) lastLoggedPercent = percent;
       broadcastProgress({
         type: 'progress',
         activeJob: job,
         percent: job.progress,
-        log: shouldLog ? `${videoNumStr} Progreso de codificación FFmpeg: ${percent}%` : null
+        metrics: metrics || null,
+        log: shouldLog ? `${videoNumStr} Progreso de codificación FFmpeg: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}` : null
       });
     });
 
