@@ -121,6 +121,25 @@ function readDb() {
   }
 }
 
+// Limpiar archivos temporales huérfanos que hayan quedado de caídas anteriores
+function cleanOrphanTmpFiles() {
+  try {
+    const dir = path.dirname(DB_PATH);
+    const baseName = path.basename(DB_PATH);
+    if (fs.existsSync(dir)) {
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.startsWith(baseName) && file.endsWith('.tmp')) {
+          try {
+            fs.unlinkSync(path.join(dir, file));
+          } catch {}
+        }
+      }
+    }
+  } catch {}
+}
+cleanOrphanTmpFiles();
+
 function writeDb(data) {
   const tempPath = `${DB_PATH}.${Date.now()}_${Math.random().toString(36).substring(2, 6)}.tmp`;
   const bakPath = DB_PATH + '.bak';
@@ -138,8 +157,24 @@ function writeDb(data) {
       }
     }
 
-    // 3. Renombrado atómico en el sistema de archivos (reemplazo in-place infalible)
-    fs.renameSync(tempPath, DB_PATH);
+    // 3. Renombrado atómico en el sistema de archivos con reintentos para Windows (EBUSY / EPERM)
+    let renamed = false;
+    let attempts = 0;
+    while (!renamed && attempts < 4) {
+      try {
+        attempts++;
+        fs.renameSync(tempPath, DB_PATH);
+        renamed = true;
+      } catch (renameErr) {
+        if (attempts >= 4) throw renameErr;
+        // Pausa no consumidora de CPU delegada al planificador del sistema operativo
+        try {
+          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30 * attempts);
+        } catch {
+          // Fallback pasivo
+        }
+      }
+    }
     return true;
   } catch (error) {
     console.error('Error writing atomically to local db.json:', error);

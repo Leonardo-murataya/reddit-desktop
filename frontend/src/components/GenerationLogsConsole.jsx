@@ -161,7 +161,50 @@ const parseLogEntry = (log) => {
   return { timestamp, content, tag, badgeColor, rowTextColor, original: log };
 };
 
-export default function GenerationLogsConsole({
+// Caché en memoria para evitar re-parsear logs existentes con regex repetidamente
+const logEntryCache = new Map();
+const getParsedLog = (log) => {
+  let cached = logEntryCache.get(log);
+  if (!cached) {
+    cached = parseLogEntry(log);
+    // Limitar la caché a 1000 elementos
+    if (logEntryCache.size > 1000) {
+      const firstKey = logEntryCache.keys().next().value;
+      logEntryCache.delete(firstKey);
+    }
+    logEntryCache.set(log, cached);
+  }
+  return cached;
+};
+
+// Componente de fila memoizado para evitar re-renderizados de líneas pasadas
+const LogRow = React.memo(function LogRow({ item }) {
+  return (
+    <div 
+      className="group flex items-start gap-2.5 p-1.5 rounded-lg hover:bg-white/[0.03] transition-colors duration-150 leading-relaxed"
+    >
+      <span className="text-[9px] font-mono text-gray-600 select-none w-6 text-right shrink-0 pt-0.5">
+        {item.id + 1}
+      </span>
+
+      {item.timestamp && (
+        <span className="text-[9.5px] text-gray-500 font-mono select-none shrink-0 pt-0.5">
+          [{item.timestamp}]
+        </span>
+      )}
+
+      <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded border uppercase tracking-wider shrink-0 select-none ${item.badgeColor}`}>
+        {item.tag}
+      </span>
+
+      <span className={`break-words flex-1 ${item.rowTextColor}`}>
+        {item.content}
+      </span>
+    </div>
+  );
+});
+
+function GenerationLogsConsole({
   logs = [],
   activeJob = null,
   clearedLogsCount = 0,
@@ -179,42 +222,44 @@ export default function GenerationLogsConsole({
     return logs.slice(clearedLogsCount);
   }, [logs, clearedLogsCount]);
 
+  // Parsear usando la caché: los logs existentes se obtienen en O(1) sin re-ejecutar regex
+  const parsedLogs = useMemo(() => {
+    return visibleLogs.map((log, index) => ({ ...getParsedLog(log), id: index }));
+  }, [visibleLogs]);
+
   // Logs filtrados por tipo o búsqueda
   const parsedAndFilteredLogs = useMemo(() => {
-    return visibleLogs
-      .map((log, index) => ({ ...parseLogEntry(log), id: index }))
-      .filter((item) => {
-        if (filterType !== 'ALL') {
-          if (filterType === 'ERROR' && item.tag !== 'ERROR') return false;
-          if (filterType === 'RENDER' && item.tag !== 'RENDER' && item.tag !== 'ÉXITO') return false;
-          if (filterType === 'AUDIO' && item.tag !== 'AUDIO') return false;
-          if (filterType === 'IA' && item.tag !== 'IA') return false;
-        }
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return item.original.toLowerCase().includes(q);
-        }
-        return true;
-      });
-  }, [visibleLogs, filterType, searchQuery]);
+    return parsedLogs.filter((item) => {
+      if (filterType !== 'ALL') {
+        if (filterType === 'ERROR' && item.tag !== 'ERROR') return false;
+        if (filterType === 'RENDER' && item.tag !== 'RENDER' && item.tag !== 'ÉXITO') return false;
+        if (filterType === 'AUDIO' && item.tag !== 'AUDIO') return false;
+        if (filterType === 'IA' && item.tag !== 'IA') return false;
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return item.original.toLowerCase().includes(q);
+      }
+      return true;
+    });
+  }, [parsedLogs, filterType, searchQuery]);
 
-  // Contadores para filtros
+  // Contadores para filtros calculados sobre logs parseados
   const counts = useMemo(() => {
     let errorCount = 0;
     let renderCount = 0;
     let audioCount = 0;
     let iaCount = 0;
 
-    visibleLogs.forEach((log) => {
-      const parsed = parseLogEntry(log);
-      if (parsed.tag === 'ERROR') errorCount++;
-      if (parsed.tag === 'RENDER' || parsed.tag === 'ÉXITO') renderCount++;
-      if (parsed.tag === 'AUDIO') audioCount++;
-      if (parsed.tag === 'IA') iaCount++;
+    parsedLogs.forEach((item) => {
+      if (item.tag === 'ERROR') errorCount++;
+      if (item.tag === 'RENDER' || item.tag === 'ÉXITO') renderCount++;
+      if (item.tag === 'AUDIO') audioCount++;
+      if (item.tag === 'IA') iaCount++;
     });
 
-    return { errorCount, renderCount, audioCount, iaCount, total: visibleLogs.length };
-  }, [visibleLogs]);
+    return { errorCount, renderCount, audioCount, iaCount, total: parsedLogs.length };
+  }, [parsedLogs]);
 
   // Auto-scroll al final cuando llegan logs nuevos si autoScroll está activo
   useEffect(() => {
@@ -502,32 +547,7 @@ export default function GenerationLogsConsole({
           </div>
         ) : (
           parsedAndFilteredLogs.map((item) => (
-            <div 
-              key={item.id} 
-              className="group flex items-start gap-2.5 p-1.5 rounded-lg hover:bg-white/[0.03] transition-colors duration-150 leading-relaxed"
-            >
-              {/* Número de línea discreto */}
-              <span className="text-[9px] font-mono text-gray-600 select-none w-6 text-right shrink-0 pt-0.5">
-                {item.id + 1}
-              </span>
-
-              {/* Timestamp si existe */}
-              {item.timestamp && (
-                <span className="text-[9.5px] text-gray-500 font-mono select-none shrink-0 pt-0.5">
-                  [{item.timestamp}]
-                </span>
-              )}
-
-              {/* Tag / Badge de Categoría */}
-              <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded border uppercase tracking-wider shrink-0 select-none ${item.badgeColor}`}>
-                {item.tag}
-              </span>
-
-              {/* Texto del Log */}
-              <span className={`break-words flex-1 ${item.rowTextColor}`}>
-                {item.content}
-              </span>
-            </div>
+            <LogRow key={item.id} item={item} />
           ))
         )}
         <div ref={terminalEndRef} />
@@ -535,3 +555,5 @@ export default function GenerationLogsConsole({
     </div>
   );
 }
+
+export default React.memo(GenerationLogsConsole);

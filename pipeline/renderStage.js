@@ -77,6 +77,8 @@ async function executeRenderStage({
     });
 
     let lastLogged916 = -1;
+    let lastBroadcast916 = 0;
+    let pendingLog916 = null;
     await ffmpeg.compileVideo({
       ...baseParams,
       assSubtitlesPath: subtitleData.assPath916,
@@ -92,15 +94,23 @@ async function executeRenderStage({
         job.renderSpeed = metrics.speed;
         job.renderEta = metrics.etaSeconds;
       }
-      const shouldLog = (percent > 0 && percent !== lastLogged916);
-      if (shouldLog) lastLogged916 = percent;
-      broadcastProgress({
-        type: 'progress',
-        activeJob: job,
-        percent: job.progress,
-        metrics: metrics || null,
-        log: shouldLog ? `${videoNumStr} Progreso de codificación 9:16: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}` : null
-      });
+      if (percent > 0 && percent !== lastLogged916) {
+        lastLogged916 = percent;
+        pendingLog916 = `${videoNumStr} Progreso de codificación 9:16: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}`;
+      }
+      const now = Date.now();
+      if (now - lastBroadcast916 >= 250 || percent === 100) {
+        lastBroadcast916 = now;
+        const logToSend = pendingLog916;
+        pendingLog916 = null;
+        broadcastProgress({
+          type: 'progress',
+          activeJob: job,
+          percent: job.progress,
+          metrics: metrics || null,
+          log: logToSend
+        });
+      }
     });
 
     if (isCancelRequested()) throw new Error('La generación fue cancelada por solicitud del usuario.');
@@ -116,6 +126,8 @@ async function executeRenderStage({
     });
 
     let lastLogged169 = -1;
+    let lastBroadcast169 = 0;
+    let pendingLog169 = null;
     await ffmpeg.compileVideo({
       ...baseParams,
       assSubtitlesPath: subtitleData.assPath169,
@@ -131,15 +143,23 @@ async function executeRenderStage({
         job.renderSpeed = metrics.speed;
         job.renderEta = metrics.etaSeconds;
       }
-      const shouldLog = (percent > 0 && percent !== lastLogged169);
-      if (shouldLog) lastLogged169 = percent;
-      broadcastProgress({
-        type: 'progress',
-        activeJob: job,
-        percent: job.progress,
-        metrics: metrics || null,
-        log: shouldLog ? `${videoNumStr} Progreso de codificación 16:9: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}` : null
-      });
+      if (percent > 0 && percent !== lastLogged169) {
+        lastLogged169 = percent;
+        pendingLog169 = `${videoNumStr} Progreso de codificación 16:9: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}`;
+      }
+      const now = Date.now();
+      if (now - lastBroadcast169 >= 250 || percent === 100) {
+        lastBroadcast169 = now;
+        const logToSend = pendingLog169;
+        pendingLog169 = null;
+        broadcastProgress({
+          type: 'progress',
+          activeJob: job,
+          percent: job.progress,
+          metrics: metrics || null,
+          log: logToSend
+        });
+      }
     });
 
     return {
@@ -165,6 +185,8 @@ async function executeRenderStage({
     });
 
     let lastLoggedPercent = -1;
+    let lastBroadcastSingle = 0;
+    let pendingLogSingle = null;
     await ffmpeg.compileVideo({
       ...baseParams,
       assSubtitlesPath: subtitleData.assPath,
@@ -183,15 +205,23 @@ async function executeRenderStage({
         job.renderSpeed = metrics.speed;
         job.renderEta = metrics.etaSeconds;
       }
-      const shouldLog = (percent > 0 && percent !== lastLoggedPercent);
-      if (shouldLog) lastLoggedPercent = percent;
-      broadcastProgress({
-        type: 'progress',
-        activeJob: job,
-        percent: job.progress,
-        metrics: metrics || null,
-        log: shouldLog ? `${videoNumStr} Progreso de codificación FFmpeg: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}` : null
-      });
+      if (percent > 0 && percent !== lastLoggedPercent) {
+        lastLoggedPercent = percent;
+        pendingLogSingle = `${videoNumStr} Progreso de codificación FFmpeg: ${percent}% ${metrics?.fps ? `(${metrics.fps} FPS - ${metrics.speed}x)` : ''}`;
+      }
+      const now = Date.now();
+      if (now - lastBroadcastSingle >= 250 || percent === 100) {
+        lastBroadcastSingle = now;
+        const logToSend = pendingLogSingle;
+        pendingLogSingle = null;
+        broadcastProgress({
+          type: 'progress',
+          activeJob: job,
+          percent: job.progress,
+          metrics: metrics || null,
+          log: logToSend
+        });
+      }
     });
 
     return {

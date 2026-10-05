@@ -144,13 +144,13 @@ router.get('/dialog/music', (req, res) => {
 router.get('/utils/file-exists', (req, res) => {
   try {
     const { path: filePath } = req.query;
-    if (!filePath) {
+    if (!filePath || typeof filePath !== 'string' || filePath.length > 1024) {
       return res.json({ exists: false });
     }
     const exists = fs.existsSync(filePath);
     res.json({ exists });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, exists: false });
   }
 });
 

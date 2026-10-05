@@ -4,6 +4,33 @@ const fs = require('fs');
 const ffmpegPath = require('ffmpeg-static');
 const gpu = require('./gpuDetector');
 
+let activeFfmpegProcess = null;
+
+/**
+ * Detiene forzosamente cualquier proceso de renderizado activo de FFmpeg
+ * para evitar procesos zombies en segundo plano si el usuario cancela la cola.
+ */
+function killActiveProcess() {
+  if (activeFfmpegProcess && !activeFfmpegProcess.killed) {
+    try {
+      console.log(`[FFmpeg] Cancelando y terminando proceso de FFmpeg (PID ${activeFfmpegProcess.pid})...`);
+      if (process.platform === 'win32' && activeFfmpegProcess.pid) {
+        const { execSync } = require('child_process');
+        try {
+          execSync(`taskkill /pid ${activeFfmpegProcess.pid} /T /F`, { stdio: 'ignore' });
+        } catch {}
+      }
+      activeFfmpegProcess.kill('SIGKILL');
+      activeFfmpegProcess = null;
+      return true;
+    } catch (err) {
+      console.warn('[FFmpeg] Error al terminar proceso activo:', err.message);
+      activeFfmpegProcess = null;
+    }
+  }
+  return false;
+}
+
 /**
  * Compila el video completo usando FFmpeg combinando fondo, card, audios y subtítulos.
  * @param {object} params - Parámetros de renderizado
@@ -464,21 +491,36 @@ async function compileVideo(params, onProgress = () => {}) {
       windowsHide: true
     });
 
-    // Asignar prioridad Below Normal en Windows para garantizar fluidez absoluta de la pantalla y el navegador
+    activeFfmpegProcess = ffmpegProcess;
+
+    // Asignar prioridad Normal en Windows para evitar que el planificador de energía (EcoQoS) 
+    // reduzca a la mitad la velocidad del encoder de video al minimizar o cambiar de ventana
     if (ffmpegProcess && ffmpegProcess.pid) {
       try {
         const os = require('os');
-        os.setPriority(ffmpegProcess.pid, os.constants.priority.PRIORITY_BELOW_NORMAL);
-        console.log(`[FFmpeg Priority] Proceso PID ${ffmpegProcess.pid} asignado con prioridad BELOW_NORMAL.`);
+        os.setPriority(ffmpegProcess.pid, os.constants.priority.PRIORITY_NORMAL);
+        console.log(`[FFmpeg Priority] Proceso PID ${ffmpegProcess.pid} asignado con prioridad NORMAL (EcoQoS deshabilitado).`);
       } catch (pErr) {
         // Ignorar si el sistema operativo no soporta ajuste dinámico de prioridad
       }
     }
 
     let stderrAccumulator = '';
+    let lastDataTime = Date.now();
+
+    // Watchdog de inactividad: si FFmpeg no emite ningún dato en stderr durante 3 minutos, se considera colgado
+    const watchdogInterval = setInterval(() => {
+      if (Date.now() - lastDataTime > 180000) {
+        clearInterval(watchdogInterval);
+        console.error('[FFmpeg Watchdog] Proceso congelado sin responder durante 3 minutos. Terminando...');
+        killActiveProcess();
+        reject(new Error('FFmpeg no respondió durante más de 3 minutos (inactividad detectada por Watchdog).'));
+      }
+    }, 15000);
 
     // FFmpeg reporta el progreso y telemetría en stderr
     ffmpegProcess.stderr.on('data', (data) => {
+      lastDataTime = Date.now();
       const text = data.toString();
       stderrAccumulator += text;
       
@@ -515,6 +557,11 @@ async function compileVideo(params, onProgress = () => {}) {
     });
 
     ffmpegProcess.on('close', (code) => {
+      clearInterval(watchdogInterval);
+      if (activeFfmpegProcess === ffmpegProcess) {
+        activeFfmpegProcess = null;
+      }
+
       if (code === 0) {
         console.log(`Video renderizado y guardado en: ${outputPath}`);
         resolve(outputPath);
@@ -537,6 +584,10 @@ async function compileVideo(params, onProgress = () => {}) {
     });
 
     ffmpegProcess.on('error', (err) => {
+      clearInterval(watchdogInterval);
+      if (activeFfmpegProcess === ffmpegProcess) {
+        activeFfmpegProcess = null;
+      }
       console.error('Error al iniciar el proceso de FFmpeg:', err);
       reject(new Error(`No se pudo ejecutar FFmpeg local. Asegúrate de tenerlo agregado a las variables de entorno de tu Windows. ${err.message}`));
     });
@@ -544,5 +595,6 @@ async function compileVideo(params, onProgress = () => {}) {
 }
 
 module.exports = {
-  compileVideo
+  compileVideo,
+  killActiveProcess
 };

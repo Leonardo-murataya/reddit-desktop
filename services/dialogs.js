@@ -74,6 +74,18 @@ function runPowerShellScript(scriptContent) {
 }
 
 /**
+ * Escapa de forma segura cadenas para PowerShell usando literales de comillas simples ('...').
+ * En PowerShell, las comillas simples tratan todo su contenido como texto plano literal,
+ * impidiendo la evaluación de variables ($) o sustitución de comandos ($()).
+ * @param {string} str 
+ * @returns {string}
+ */
+function psEscape(str) {
+  if (typeof str !== 'string') return "''";
+  return `'${str.replace(/'/g, "''")}'`;
+}
+
+/**
  * Lanza un diálogo moderno de Windows para seleccionar una carpeta.
  * @param {string} [title] 
  * @param {string} [initialPath]
@@ -93,9 +105,10 @@ function selectLocalFolder(title = 'Selecciona una carpeta', initialPath = '') {
     [System.Windows.Forms.Application]::EnableVisualStyles()
     $f = New-Object System.Windows.Forms.FolderBrowserDialog
     $f.ShowNewFolderButton = $true
-    $f.Description = "${title.replace(/"/g, '`"')}"
-    if ("${initialPath.replace(/\\/g, '\\\\')}" -ne "" -and (Test-Path "${initialPath.replace(/\\/g, '\\\\')}")) {
-      $f.SelectedPath = "${initialPath.replace(/\\/g, '\\\\')}"
+    $f.Description = ${psEscape(title)}
+    $init = ${psEscape(initialPath)}
+    if ($init -ne '' -and (Test-Path $init)) {
+      $f.SelectedPath = $init
     }
     $result = $f.ShowDialog()
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
@@ -108,7 +121,7 @@ function selectLocalFolder(title = 'Selecciona una carpeta', initialPath = '') {
 
 /**
  * Lanza un diálogo moderno de Windows para seleccionar múltiples archivos de video.
- * @param {string} [title]
+ * @param {string} [title] 
  * @param {string} [initialPath]
  * @returns {Array<string>} Lista de rutas absolutas de archivos seleccionados.
  */
@@ -128,9 +141,10 @@ function selectLocalFiles(title = 'Selecciona tus videos de fondo', initialPath 
     $f.Filter = 'Archivos de Video (*.mp4;*.mkv;*.mov;*.avi;*.webm)|*.mp4;*.mkv;*.mov;*.avi;*.webm|Todos los archivos (*.*)|*.*'
     $f.Multiselect = $true
     $f.AutoUpgradeEnabled = $true
-    $f.Title = "${title.replace(/"/g, '`"')}"
-    if ("${initialPath.replace(/\\/g, '\\\\')}" -ne "" -and (Test-Path "${initialPath.replace(/\\/g, '\\\\')}")) {
-      $f.InitialDirectory = "${initialPath.replace(/\\/g, '\\\\')}"
+    $f.Title = ${psEscape(title)}
+    $init = ${psEscape(initialPath)}
+    if ($init -ne '' -and (Test-Path $init)) {
+      $f.InitialDirectory = $init
     }
     $result = $f.ShowDialog()
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
@@ -164,8 +178,8 @@ function selectSaveLocation(defaultFileName = 'plantilla_template.json', title =
     $f.Filter = 'Plantilla de Video JSON (*.json)|*.json|Todos los archivos (*.*)|*.*'
     $f.DefaultExt = 'json'
     $f.AddExtension = $true
-    $f.FileName = "${defaultFileName.replace(/"/g, '`"')}"
-    $f.Title = "${title.replace(/"/g, '`"')}"
+    $f.FileName = ${psEscape(defaultFileName)}
+    $f.Title = ${psEscape(title)}
     $f.AutoUpgradeEnabled = $true
     $result = $f.ShowDialog()
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
@@ -192,7 +206,7 @@ function selectLocalImage(title = 'Selecciona una imagen') {
       $f.Filter = 'Imágenes (*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp;*.svg)|*.png;*.jpg;*.jpeg;*.webp;*.gif;*.bmp;*.svg|Todos los archivos (*.*)|*.*'
       $f.Multiselect = $false
       $f.AutoUpgradeEnabled = $true
-      $f.Title = "${title.replace(/"/g, '`"')}"
+      $f.Title = ${psEscape(title)}
       $result = $f.ShowDialog()
       if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
         Write-Output $f.FileName
@@ -255,7 +269,7 @@ function selectLocalAudio(title = 'Selecciona tu música de fondo') {
     $f.Filter = 'Archivos de Audio (*.mp3;*.wav;*.m4a;*.ogg;*.aac)|*.mp3;*.wav;*.m4a;*.ogg;*.aac|Todos los archivos (*.*)|*.*'
     $f.Multiselect = $false
     $f.AutoUpgradeEnabled = $true
-    $f.Title = "${title.replace(/"/g, '`"')}"
+    $f.Title = ${psEscape(title)}
     $result = $f.ShowDialog()
     if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
       Write-Output $f.FileName

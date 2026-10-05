@@ -5,6 +5,7 @@ const db = require('../services/db');
 const notifier = require('../services/notifier');
 const pipelineManager = require('../pipeline/pipelineManager');
 const { executeScriptStage } = require('../pipeline/scriptStage');
+const ffmpeg = require('../services/ffmpeg');
 
 // Estado en memoria de la cola
 let activeJob = null;
@@ -16,6 +17,23 @@ let isPaused = false;
 let failedItems = [];
 let batchStartTime = null;
 let lastBatchContext = null;
+
+// Heartbeat periódico (cada 25s) para mantener activas las conexiones SSE y limpiar sockets muertos
+setInterval(() => {
+  if (sseClients.size > 0) {
+    sseClients.forEach(client => {
+      try {
+        if (client.destroyed || client.writableEnded) {
+          sseClients.delete(client);
+        } else {
+          client.write(': ping\n\n');
+        }
+      } catch {
+        sseClients.delete(client);
+      }
+    });
+  }
+}, 25000);
 
 function getEtaSeconds(job) {
   if (!batchStartTime) return null;
@@ -51,6 +69,10 @@ function broadcastProgress(data) {
   });
   if (data.log) {
     jobLogs.push(`[${new Date().toLocaleTimeString()}] ${data.log}`);
+    // Limitar el buffer circular a los últimos 500 registros para evitar fugas de memoria
+    if (jobLogs.length > 500) {
+      jobLogs.splice(0, jobLogs.length - 500);
+    }
   }
 }
 
@@ -83,6 +105,12 @@ function cancelJob() {
   isPaused = false;
   activeJob.status = 'cancelling';
   activeJob.currentStep = 'Cancelando generación...';
+
+  // Detener de inmediato cualquier proceso hijo de codificación de FFmpeg para evitar procesos zombies
+  if (ffmpeg && typeof ffmpeg.killActiveProcess === 'function') {
+    ffmpeg.killActiveProcess();
+  }
+
   if (activeJob.videoTasks && Array.isArray(activeJob.videoTasks)) {
     for (const item of activeJob.videoTasks) {
       item.prefetchedScriptPromise = null;

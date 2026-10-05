@@ -11,7 +11,29 @@ const app = express();
 const PORT = process.env.PORT || 31826;
 
 // Middlewares
-app.use(cors());
+const allowedOrigins = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
+  /^https?:\/\/localhost(:\d+)?$/,
+  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+  'null' // Para file:// o entornos locales empaquetados
+];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // Permitir solicitudes locales directas (sin Origin header) como herramientas locales, Electron o scripts
+    if (!origin) return callback(null, true);
+    const isAllowed = allowedOrigins.some(pattern => {
+      if (pattern instanceof RegExp) return pattern.test(origin);
+      return pattern === origin;
+    });
+    if (isAllowed) {
+      return callback(null, true);
+    }
+    return callback(new Error('Bloqueado por política CORS: Acceso no autorizado desde origen externo.'));
+  },
+  credentials: true
+}));
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 

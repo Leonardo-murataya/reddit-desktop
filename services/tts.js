@@ -155,7 +155,18 @@ async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options
             });
           }
           ttsInstance = new EdgeTTS();
-          await ttsInstance.synthesize(chunk, voice, synthesisOptions);
+          const synthesizePromise = ttsInstance.synthesize(chunk, voice, synthesisOptions);
+          let timeoutHandle;
+          const timeoutPromise = new Promise((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              reject(new Error('Edge-TTS synthesize timeout excedido (45s sin respuesta del WebSocket de Microsoft)'));
+            }, 45000);
+          });
+          try {
+            await Promise.race([synthesizePromise, timeoutPromise]);
+          } finally {
+            clearTimeout(timeoutHandle);
+          }
           
           let savePath = partAudioPath;
           if (savePath.toLowerCase().endsWith('.mp3')) {
