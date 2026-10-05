@@ -280,7 +280,10 @@ function saveBatchReport({
   batchContent += `Total de Videos Solicitados: ${totalCount}\n`;
   batchContent += `Videos Generados Exitosamente: ${batchReportItems.length}\n\n`;
 
-  for (const reportItem of batchReportItems) {
+  // Ordenar siempre los videos por índice ascendente (1, 2, 3...) para garantizar secuencia perfecta
+  const sortedItems = [...batchReportItems].sort((a, b) => (parseInt(a.index) || 0) - (parseInt(b.index) || 0));
+
+  for (const reportItem of sortedItems) {
     batchContent += `------------------------------------------------------------\n`;
     batchContent += `[Video ${reportItem.index}/${totalCount}]\n`;
     batchContent += `Título: ${reportItem.title}\n\n`;
@@ -312,13 +315,17 @@ function saveBatchReport({
   }
 
   const idSuffix = (typeof jobId === 'string' && jobId.length >= 8) ? jobId.substring(0, 8) : Date.now().toString().slice(-8);
-  const batchReportPath = path.join(activeReportFolder, `reporte_lote_${idSuffix}.txt`);
+  const batchReportPath = job?.batchReportPath || path.join(activeReportFolder, `reporte_lote_${idSuffix}.txt`);
+  if (job && !job.batchReportPath) {
+    job.batchReportPath = batchReportPath;
+  }
 
   try {
     const reportDir = path.dirname(batchReportPath);
     if (!fs.existsSync(reportDir)) {
       fs.mkdirSync(reportDir, { recursive: true });
     }
+    const fileExisted = fs.existsSync(batchReportPath);
     fs.writeFileSync(batchReportPath, batchContent, 'utf8');
     console.log(`[Pipeline] Reporte consolidado unificado de texto guardado en: ${batchReportPath}`);
 
@@ -327,7 +334,7 @@ function saveBatchReport({
       type: 'status',
       status: 'processing',
       activeJob: job,
-      log: `${prefix}Reporte consolidado unificado de texto creado en: ${batchReportPath}`
+      log: `${prefix}Reporte consolidado unificado de texto ${fileExisted ? 'actualizado' : 'creado'} en: ${batchReportPath}`
     });
     return batchReportPath;
   } catch (txtErr) {

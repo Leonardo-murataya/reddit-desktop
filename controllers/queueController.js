@@ -15,6 +15,7 @@ let pauseRequested = false;
 let isPaused = false;
 let failedItems = [];
 let batchStartTime = null;
+let lastBatchContext = null;
 
 function getEtaSeconds(job) {
   if (!batchStartTime) return null;
@@ -139,6 +140,9 @@ async function startBatch({ batchItems, prompt, count = 1, templateId, profileId
     throw new Error('Ya hay un trabajo de generación en curso.');
   }
 
+  // Reiniciar contexto previo para garantizar un lote y reporte limpios
+  lastBatchContext = null;
+
   const currentDb = db.readDb();
   let normalizedBatch = [];
 
@@ -224,11 +228,19 @@ async function retryFailedJobs() {
   const retryBatch = [...failedItems];
   failedItems = [];
 
+  const originalJobId = lastBatchContext?.batchId || retryBatch[0]?.originalJobId || uuidv4();
+  const originalTotalCount = lastBatchContext?.totalCount || retryBatch[0]?.originalTotalCount || retryBatch.length;
+  const originalReportPath = lastBatchContext?.batchReportPath || null;
+  const failedIndicesStr = retryBatch.map(r => `#${r.originalVideoIndex || 1}`).join(', ');
+
   activeJob = {
-    id: uuidv4(),
-    prompt: `Reintento de ${retryBatch.length} videos fallidos`,
-    totalCount: retryBatch.length,
-    currentVideoIndex: 0,
+    id: originalJobId,
+    batchReportPath: originalReportPath,
+    prompt: `Reintento de ${retryBatch.length} video(s) fallidos (${failedIndicesStr})`,
+    totalCount: originalTotalCount,
+    currentVideoIndex: retryBatch[0]?.originalVideoIndex || 1,
+    retryCount: retryBatch.length,
+    isRetry: true,
     status: 'starting',
     progress: 0,
     currentStep: 'Reintentando videos fallidos'
@@ -238,7 +250,7 @@ async function retryFailedJobs() {
   pauseRequested = false;
   isPaused = false;
 
-  runGenerationQueue(activeJob, retryBatch, currentDb.settings.backgroundFolder).catch(err => {
+  runGenerationQueue(activeJob, retryBatch, currentDb.settings.backgroundFolder, { isRetry: true }).catch(err => {
     console.error('[QueueController] Error crítico en cola de reintento:', err);
     activeJob = null;
     broadcastProgress({ type: 'error', error: err.message, log: `ERROR CRÍTICO: ${err.message}` });
@@ -247,7 +259,7 @@ async function retryFailedJobs() {
   return { success: true, jobId: activeJob.id };
 }
 
-async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder) {
+async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder, options = {}) {
   batchStartTime = Date.now();
   pauseRequested = false;
   isPaused = false;
@@ -264,7 +276,10 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         profileId: item.profileId,
         customStory: item.customStory,
         count: 1,
-        prefetchedScriptPromise: null
+        prefetchedScriptPromise: null,
+        originalVideoIndex: item.originalVideoIndex || null,
+        originalTotalCount: item.originalTotalCount || null,
+        originalJobId: item.originalJobId || null
       });
     }
   }
@@ -272,8 +287,25 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
 
   const currentDb = db.readDb();
   const defaultExportFolder = currentDb.settings.exportFolder || path.join(__dirname, '..', 'temp');
-  const batchReportItems = [];
-  let exportFolder = defaultExportFolder;
+
+  // Si es un reintento, recuperar el reporte acumulado del lote original para actualizar en el mismo .txt
+  const batchReportItems = options.isRetry && lastBatchContext?.batchReportItems
+    ? [...lastBatchContext.batchReportItems]
+    : [];
+
+  let exportFolder = (options.isRetry && lastBatchContext?.exportFolder)
+    ? lastBatchContext.exportFolder
+    : defaultExportFolder;
+
+  if (!options.isRetry) {
+    lastBatchContext = {
+      batchId: job.id,
+      totalCount: job.totalCount,
+      batchReportItems: [],
+      exportFolder: exportFolder,
+      batchReportPath: null
+    };
+  }
 
   const usedTemplates = new Set();
   const usedProfiles = new Set();
@@ -286,14 +318,18 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
   });
 
   try {
+    const startMsg = options.isRetry
+      ? `Reintentando ${videoTasks.length} video(s) del lote original (${job.totalCount} videos en total).`
+      : `Iniciando generación de lote: ${job.totalCount} videos solicitados.`;
+
     broadcastProgress({
       type: 'status',
       status: 'processing',
       activeJob: job,
-      log: `Iniciando generación de lote: ${job.totalCount} videos solicitados.`
+      log: startMsg
     });
 
-    for (let index = 0; index < job.totalCount; index++) {
+    for (let index = 0; index < videoTasks.length; index++) {
       if (cancelRequested) {
         throw new Error('La generación fue cancelada por solicitud del usuario.');
       }
@@ -307,7 +343,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           type: 'status',
           status: 'paused',
           activeJob: job,
-          log: `Generación pausada antes de iniciar el Video #${index + 1}. El proceso está congelado.`
+          log: `Generación pausada antes de procesar el Video #${index + 1}. El proceso está congelado.`
         });
 
         while (pauseRequested && !cancelRequested) {
@@ -327,14 +363,15 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
         }
       }
 
-      job.currentVideoIndex = index + 1;
-
       // Obtener configuración del video actual a partir de videoTasks
       const currentItem = videoTasks[index] || normalizedBatch[0];
 
       if (!currentItem) {
         throw new Error('Error al determinar la plantilla del lote actual.');
       }
+
+      // Asignar el número de video real dentro del lote original (ej: Video 3)
+      job.currentVideoIndex = currentItem.originalVideoIndex || (index + 1);
 
       const freshDb = db.readDb();
       const template = freshDb.templates.find(t => t.id === currentItem.templateId) || freshDb.templates[0];
@@ -358,17 +395,22 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           ? freshDb.settings.exportFolder.trim()
           : defaultExportFolder;
 
+      if (lastBatchContext) {
+        lastBatchContext.exportFolder = exportFolder;
+      }
+
       // Callback disparado tan pronto como el guion del video actual esté listo
       const nextIndex = index + 1;
       const handleScriptReady = () => {
-        if (nextIndex < job.totalCount && !cancelRequested) {
+        if (nextIndex < videoTasks.length && !cancelRequested) {
           const nextItem = videoTasks[nextIndex];
           if (nextItem && !nextItem.customStory && !nextItem.prefetchedScriptPromise) {
             const nextDb = db.readDb();
             const nextTemplate = nextDb.templates.find(t => t.id === nextItem.templateId) || nextDb.templates[0];
             const nextProfId = nextItem.profileId || nextTemplate?.profileId || nextDb.settings.defaultProfileId;
             const nextProfile = nextDb.profiles.find(p => p.id === nextProfId) || nextDb.profiles[0];
-            const nextVideoNumStr = `[Video ${nextIndex + 1}/${job.totalCount}]`;
+            const nextRealIndex = nextItem.originalVideoIndex || (nextIndex + 1);
+            const nextVideoNumStr = `[Video ${nextRealIndex}/${job.totalCount}]`;
 
             broadcastProgress({
               type: 'log',
@@ -407,11 +449,22 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           onScriptReady: handleScriptReady
         });
 
-        batchReportItems.push(result.reportItem);
+        // Insertar o actualizar el video en el reporte consolidado
+        const existingIdx = batchReportItems.findIndex(r => r.index === result.reportItem.index);
+        if (existingIdx !== -1) {
+          batchReportItems[existingIdx] = result.reportItem;
+        } else {
+          batchReportItems.push(result.reportItem);
+        }
+        batchReportItems.sort((a, b) => (parseInt(a.index) || 0) - (parseInt(b.index) || 0));
+
+        if (lastBatchContext) {
+          lastBatchContext.batchReportItems = [...batchReportItems];
+        }
 
         // Guardar/actualizar incrementalmente el reporte unificado en disco y emitir SSE log
         const videoNumStr = job.totalCount > 1 ? `[Video ${job.currentVideoIndex}/${job.totalCount}]` : '';
-        pipelineManager.saveBatchReport({
+        const savedReportPath = pipelineManager.saveBatchReport({
           batchReportItems,
           job,
           profile,
@@ -420,6 +473,11 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           videoNumStr,
           broadcastProgress
         });
+
+        if (savedReportPath && lastBatchContext) {
+          lastBatchContext.batchReportPath = savedReportPath;
+          job.batchReportPath = savedReportPath;
+        }
 
         const durationMs = Date.now() - batchStartTime;
         const minutes = Math.floor(durationMs / 60000);
@@ -441,7 +499,14 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           throw videoError;
         }
 
-        failedItems.push(currentItem);
+        failedItems.push({
+          ...currentItem,
+          originalVideoIndex: job.currentVideoIndex,
+          originalTotalCount: job.totalCount,
+          originalJobId: job.id,
+          count: 1
+        });
+
         broadcastProgress({
           type: 'status',
           status: 'processing',
@@ -468,7 +533,7 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
       broadcastProgress
     });
 
-    const successCount = job.totalCount - failedItems.length;
+    const successCount = batchReportItems.length;
     job.status = failedItems.length > 0 ? 'completed_with_errors' : 'completed';
     job.currentStep = failedItems.length > 0 ? 'Lote finalizado con errores' : 'Lote completado con éxito';
     job.progress = 100;
