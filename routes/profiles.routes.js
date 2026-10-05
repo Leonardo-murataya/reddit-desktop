@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const db = require('../services/db');
+const gemini = require('../services/gemini');
+
+// Autodescubrimiento de modelos disponibles para la(s) API Key(s) provistas
+router.post('/available-models', async (req, res) => {
+  try {
+    const { apiKey } = req.body;
+    if (!apiKey || (typeof apiKey === 'string' && !apiKey.trim())) {
+      return res.status(400).json({ error: 'Debes proporcionar al menos una API Key para consultar los modelos disponibles.' });
+    }
+    const models = await gemini.listAvailableModels(apiKey);
+    res.json({ success: true, models });
+  } catch (error) {
+    console.error('[ProfilesRoutes] Error consultando modelos disponibles:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // Listar perfiles
 router.get('/', (req, res) => {

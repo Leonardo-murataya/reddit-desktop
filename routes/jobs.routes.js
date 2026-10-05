@@ -65,11 +65,13 @@ const handleGenerate = async (req, res) => {
 
         const tmplId = targetTmpl ? targetTmpl.id : (explicitTmplId || currentDb.templates[0]?.id);
         const profId = s.profileId || targetTmpl?.profileId || profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+        const customStory = s.customStory || (req.body.customStory ? req.body.customStory : null);
         return {
           templateId: tmplId,
           count: 1,
-          prompt: (s.prompt || '').trim(),
-          profileId: profId
+          prompt: (s.prompt || customStory?.title || '').trim(),
+          profileId: profId,
+          customStory
         };
       });
     } else if (batch && Array.isArray(batch)) {
@@ -85,11 +87,13 @@ const handleGenerate = async (req, res) => {
         }
         const tmplId = targetTmpl ? targetTmpl.id : (item.templateId || templateId);
         const profId = item.profileId || targetTmpl?.profileId || profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+        const customStory = item.customStory || null;
         return {
           templateId: tmplId,
           count: parseInt(item.count) || 1,
-          prompt: item.prompt,
-          profileId: profId
+          prompt: item.prompt || customStory?.title || '',
+          profileId: profId,
+          customStory
         };
       });
     } else {
@@ -102,11 +106,13 @@ const handleGenerate = async (req, res) => {
       }
       const tmplId = targetTmpl ? targetTmpl.id : templateId;
       const profId = profileId || targetTmpl?.profileId || currentDb.settings.defaultProfileId || currentDb.profiles[0]?.id;
+      const customStory = req.body.customStory || null;
       normalizedBatch = [{
         templateId: tmplId,
         count: parseInt(count) || 1,
-        prompt: prompt,
-        profileId: profId
+        prompt: prompt || customStory?.title || '',
+        profileId: profId,
+        customStory
       }];
     }
 
@@ -118,22 +124,38 @@ const handleGenerate = async (req, res) => {
         return res.status(400).json({ error: `No se encontró la plantilla de video requerida (ID: ${item.templateId || 'no especificado'}).` });
       }
 
+      const isCustom = !!item.customStory;
       const finalProfileId = item.profileId || template.profileId || currentDb.settings.defaultProfileId;
-      const profile = currentDb.profiles.find(p => p.id === finalProfileId) || currentDb.profiles[0];
-      if (!profile || !profile.apiKey) {
+      const profile = currentDb.profiles.find(p => p.id === finalProfileId) || currentDb.profiles[0] || { name: 'Perfil por defecto' };
+
+      // Solo exigir API Key si NO es una historia personalizada directa
+      if (!isCustom && (!profile || !profile.apiKey)) {
         return res.status(400).json({ error: `La plantilla "${template.name}" requiere un perfil de IA con API Key configurada.` });
+      }
+
+      // Validar contenido de historia personalizada si aplica
+      if (isCustom) {
+        const rawContent = (item.customStory.content || item.customStory.text || '').trim();
+        if (!rawContent) {
+          return res.status(400).json({ error: 'La historia personalizada no puede estar vacía.' });
+        }
+        if (!item.customStory.title || !item.customStory.title.trim()) {
+          const lines = rawContent.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          const firstLine = lines[0] || 'Historia de Reddit';
+          item.customStory.title = firstLine.length > 85 ? firstLine.substring(0, 82) + '...' : firstLine;
+        }
       }
 
       const activeBgFolder = (profile && profile.backgroundFolder && profile.backgroundFolder.trim())
         ? profile.backgroundFolder
-        : backgroundFolder;
+        : (currentDb.settings.backgroundFolder || backgroundFolder);
       if (!activeBgFolder || !fs.existsSync(activeBgFolder)) {
         return res.status(400).json({ error: `La carpeta de videos de fondo para la plantilla "${template.name}" no está configurada o no existe.` });
       }
 
       const activeExportFolder = (profile && profile.exportFolder && profile.exportFolder.trim())
         ? profile.exportFolder
-        : exportFolderGlobal;
+        : (exportFolderGlobal || path.join(__dirname, '..', 'temp'));
       if (!activeExportFolder || !activeExportFolder.trim()) {
         return res.status(400).json({ error: `La carpeta de exportación para la plantilla "${template.name}" no está configurada.` });
       }

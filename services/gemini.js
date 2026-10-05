@@ -18,19 +18,29 @@ function isModelExhausted(modelName) {
   return true;
 }
 
-/**
- * Genera una historia estructurada de Reddit basada en el prompt del usuario
- * @param {string} apiKey - Gemini API Key
- * @param {string} modelName - Nombre del modelo (ej. gemini-1.5-flash)
- * @param {string} userPrompt - Lo que el usuario quiere contar (ej. "historias de terror")
- * @param {string} systemPrompt - Instrucciones de comportamiento para la IA
- * @returns {Promise<{title: string, content: string, gender: string}>}
- */
-async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primaryAttempts = 2, fallbackAttempts = 3, customFallbackModels = 'gemini-2.5-flash') {
-  if (!apiKey) {
-    throw new Error('API Key de Gemini no proporcionada. Por favor, configúrala en Ajustes.');
-  }
+// Mapa dinámico en memoria para registrar API Keys agotadas por límite de cuota (429 / ResourceExhausted)
+const exhaustedKeys = new Map(); // apiKey -> expiryTimestamp
 
+function markKeyAsExhausted(key, durationMs = 15 * 60 * 1000) {
+  const maskedKey = key && key.length > 8 ? `${key.substring(0, 4)}...${key.substring(key.length - 4)}` : '****';
+  console.log(`[Gemini] ⚠️ API Key (${maskedKey}) marcada como agotada por cuota (429) por ${durationMs / 60000} minutos.`);
+  exhaustedKeys.set(key, Date.now() + durationMs);
+}
+
+function isKeyExhausted(key) {
+  if (!exhaustedKeys.has(key)) return false;
+  const expiry = exhaustedKeys.get(key);
+  if (Date.now() > expiry) {
+    exhaustedKeys.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Consulta en tiempo real los modelos oficiales de Google disponibles para la clave API provista.
+ */
+async function listAvailableModels(apiKey) {
   const keys = [];
   if (Array.isArray(apiKey)) {
     keys.push(...apiKey.filter(k => k && k.trim()));
@@ -38,9 +48,75 @@ async function generateStory(apiKey, modelName, userPrompt, systemPrompt, primar
     keys.push(...apiKey.split(/\r?\n|,/).map(k => k.trim()).filter(Boolean));
   }
 
-  if (keys.length === 0) {
+  const defaultGuaranteed = [
+    { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
+    { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
+    { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
+    { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
+    { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' }
+  ];
+
+  if (keys.length === 0) return defaultGuaranteed;
+
+  const keyToTest = keys.find(k => !isKeyExhausted(k)) || keys[0];
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${keyToTest}`;
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (data.models && Array.isArray(data.models)) {
+      const filtered = data.models
+        .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent'))
+        .map(m => {
+          const rawId = m.name.replace(/^models\//, '');
+          return {
+            id: rawId,
+            name: m.displayName || rawId,
+            description: m.description || ''
+          };
+        });
+      if (filtered.length > 0) return filtered;
+    }
+  } catch (err) {
+    console.warn('[Gemini] No se pudo consultar la lista en vivo de modelos:', err.message);
+  }
+
+  return defaultGuaranteed;
+}
+
+/**
+ * Genera una historia estructurada de Reddit basada en el prompt del usuario
+ */
+async function generateStory(
+  apiKey,
+  modelName,
+  userPrompt,
+  systemPrompt,
+  primaryAttempts = 2,
+  fallbackAttempts = 3,
+  customFallbackModels = 'gemini-2.5-flash',
+  maxOutputTokens = 1200,
+  onLog = null
+) {
+  if (!apiKey) {
+    throw new Error('API Key de Gemini no proporcionada. Por favor, configúrala en Ajustes.');
+  }
+
+  const rawKeys = [];
+  if (Array.isArray(apiKey)) {
+    rawKeys.push(...apiKey.filter(k => k && k.trim()));
+  } else if (typeof apiKey === 'string' && apiKey.trim()) {
+    rawKeys.push(...apiKey.split(/\r?\n|,/).map(k => k.trim()).filter(Boolean));
+  }
+
+  if (rawKeys.length === 0) {
     throw new Error('API Key de Gemini no proporcionada o vacía. Por favor, configúrala en Ajustes.');
   }
+
+  // Ordenar priorizando las claves que NO estén en cooldown por cuota (429)
+  const freshKeys = rawKeys.filter(k => !isKeyExhausted(k));
+  const keys = freshKeys.length > 0 ? freshKeys : rawKeys;
 
   let keyIndex = 0;
   
@@ -239,7 +315,8 @@ Reglas estrictas de redacción:
           generationConfig: {
             responseMimeType: 'application/json',
             responseSchema: schema,
-            temperature: 0.9
+            temperature: 0.9,
+            maxOutputTokens: parseInt(maxOutputTokens) || 1200
           },
           safetySettings
         });
@@ -346,9 +423,21 @@ Reglas estrictas de redacción:
 
       // ROTACIÓN DE CLAVES API
       if (isQuotaError || isServiceUnavailable || isTimeoutError || isAuthError) {
+        if (isQuotaError) {
+          markKeyAsExhausted(currentKey, 15 * 60 * 1000);
+          const masked = currentKey.length > 8 ? `${currentKey.substring(0, 4)}...${currentKey.substring(currentKey.length - 4)}` : '****';
+          if (typeof onLog === 'function') {
+            onLog(`⚠️ API Key (#${(keyIndex % keys.length) + 1} ${masked}) silenciada por cuota agotada (429).`);
+          }
+        }
         if (keyIndex + 1 < keys.length) {
           keyIndex++;
-          console.log(`[Gemini] 🔑 Rotando a la clave API #${keyIndex + 1} de ${keys.length}...`);
+          const nextKey = keys[keyIndex % keys.length];
+          const maskedNext = nextKey.length > 8 ? `${nextKey.substring(0, 4)}...${nextKey.substring(nextKey.length - 4)}` : '****';
+          console.log(`[Gemini] 🔑 Rotando a la clave API #${keyIndex + 1} de ${keys.length} (${maskedNext})...`);
+          if (typeof onLog === 'function') {
+            onLog(`🔑 Rotando automáticamente a la clave API #${keyIndex + 1} de ${keys.length}...`);
+          }
           attempt--; // No contar esta rotación de clave como un intento fallido del modelo
           await new Promise(resolve => setTimeout(resolve, 500));
           continue;
@@ -406,8 +495,12 @@ Reglas estrictas de redacción:
         }
       }
 
-      const currentDelay = 5000;
-      console.log(`[Gemini] Reintentando en ${currentDelay / 1000} segundos...`);
+      // Backoff exponencial con jitter dinámico para recuperación óptima
+      const baseDelay = 1500;
+      const maxDelay = 8000;
+      const jitter = Math.floor(Math.random() * 500);
+      const currentDelay = Math.min(baseDelay * Math.pow(1.8, Math.max(0, attempt - 1)), maxDelay) + jitter;
+      console.log(`[Gemini] Reintentando en ${(currentDelay / 1000).toFixed(1)} segundos (Backoff exponencial + jitter)...`);
       
       await new Promise(resolve => setTimeout(resolve, currentDelay));
     }
@@ -415,5 +508,12 @@ Reglas estrictas de redacción:
 }
 
 module.exports = {
-  generateStory
+  generateStory,
+  listAvailableModels,
+  markModelAsExhausted,
+  isModelExhausted,
+  markKeyAsExhausted,
+  isKeyExhausted,
+  exhaustedKeys,
+  exhaustedModels
 };

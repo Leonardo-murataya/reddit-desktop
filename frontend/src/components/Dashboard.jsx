@@ -45,6 +45,46 @@ export default function Dashboard({
   const [seedInputMode, setSeedInputMode] = useState('individual'); // 'individual' | 'bulk'
   const [bulkText, setBulkText] = useState('');
   
+  // Modo de origen de historia: 'ai' (Generación Gemini) o 'custom' (Historia propia directa sin API)
+  const [storySource, setStorySource] = useState('ai'); // 'ai' | 'custom'
+  const [customTitle, setCustomTitle] = useState('');
+  const [customContent, setCustomContent] = useState('');
+  const [customBulkText, setCustomBulkText] = useState('');
+  const [customInputMode, setCustomInputMode] = useState('individual'); // 'individual' | 'bulk'
+
+  // Parser para lote de historias propias separadas por delimitadores (--- o ===)
+  const parseCustomStories = (text, defaultGender = 'auto') => {
+    if (!text || !text.trim()) return [];
+    const rawBlocks = text.split(/(?:\r?\n){1,}[=-]{3,}(?:\r?\n){1,}/).map(b => b.trim()).filter(Boolean);
+    
+    return rawBlocks.map((block, idx) => {
+      const lines = block.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      let title = '';
+      let content = block;
+
+      if (lines.length > 0) {
+        const first = lines[0];
+        if (/^(?:t[ií]tulo|title|asunto)\s*[:\-]/i.test(first) || first.startsWith('#')) {
+          title = first.replace(/^(?:t[ií]tulo|title|asunto)\s*[:\-]\s*/i, '').replace(/^#+\s*/, '').trim();
+          content = lines.slice(1).join('\n').trim();
+        } else if (lines.length > 1 && first.length <= 90) {
+          title = first;
+          content = lines.slice(1).join('\n').trim();
+        }
+      }
+
+      if (!title && lines[0]) {
+        title = lines[0].length > 75 ? lines[0].substring(0, 72) + '...' : lines[0];
+      }
+
+      return {
+        title: title || `Historia #${idx + 1}`,
+        content: content || block,
+        gender: defaultGender
+      };
+    });
+  };
+  
   const [submitError, setSubmitError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -199,7 +239,7 @@ export default function Dashboard({
       }
       return next;
     });
-  }, [count, templates, profiles, settings]);
+  }, [count, templates, profiles, settings, selectedTemplate, selectedProfile]);
 
   useEffect(() => {
     if (selectedTemplate && seeds.length > 0) {
@@ -372,7 +412,56 @@ export default function Dashboard({
     let activeSeeds = [];
     let hasEmpty = false;
 
-    if (profileChain && profileChain.length > 0) {
+    if (storySource === 'custom') {
+      if (customInputMode === 'bulk') {
+        const parsed = parseCustomStories(customBulkText, 'auto');
+        if (parsed.length === 0) {
+          setSubmitError('Por favor pega al menos una historia completa (puedes separar varias con ---).');
+          setIsSubmitting(false);
+          return;
+        }
+        activeSeeds = parsed.map(story => ({
+          prompt: story.title,
+          templateId: selectedTemplate || defaultTemp?.id,
+          profileId: selectedProfile || defaultProf?.id,
+          customStory: story
+        }));
+      } else {
+        const content = customContent.trim();
+        if (!content) {
+          setSubmitError('Por favor pega el texto de la historia a narrar.');
+          setIsSubmitting(false);
+          return;
+        }
+        let title = customTitle.trim();
+        let bodyContent = content;
+        if (!title) {
+          const lines = content.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          if (lines.length > 0) {
+            let first = lines[0];
+            if (/^(?:t[ií]tulo|title|asunto)\s*[:\-]/i.test(first) || first.startsWith('#')) {
+              title = first.replace(/^(?:t[ií]tulo|title|asunto)\s*[:\-]\s*/i, '').replace(/^#+\s*/, '').trim();
+              bodyContent = lines.slice(1).join('\n').trim();
+            } else if (lines.length > 1 && first.length <= 90) {
+              title = first;
+              bodyContent = lines.slice(1).join('\n').trim();
+            } else {
+              title = first.length > 80 ? first.substring(0, 77) + '...' : first;
+            }
+          }
+        }
+        activeSeeds = [{
+          prompt: title || 'Historia de Reddit',
+          templateId: selectedTemplate || defaultTemp?.id,
+          profileId: selectedProfile || defaultProf?.id,
+          customStory: {
+            title: title || 'Historia de Reddit',
+            content: bodyContent || content,
+            gender: 'auto'
+          }
+        }];
+      }
+    } else if (profileChain && profileChain.length > 0) {
       for (const item of profileChain) {
         const pSeeds = chainSeeds[item.profileId] || [];
         const itemProf = profiles.find(p => p.id === item.profileId) || profiles[0];
@@ -406,12 +495,12 @@ export default function Dashboard({
     }
 
     if (activeSeeds.length === 0) {
-      setSubmitError('Debes ingresar al menos una idea o tema para generar.');
+      setSubmitError('Debes ingresar al menos una idea o historia para generar.');
       setIsSubmitting(false);
       return;
     }
 
-    if (hasEmpty) {
+    if (hasEmpty && storySource !== 'custom') {
       setSubmitError('Por favor completa las ideas para todos los videos antes de comenzar.');
       setIsSubmitting(false);
       return;
@@ -424,7 +513,8 @@ export default function Dashboard({
         body: JSON.stringify({
           seeds: activeSeeds,
           templateId: selectedTemplate || defaultTemp?.id,
-          profileId: selectedProfile || defaultProf?.id
+          profileId: selectedProfile || defaultProf?.id,
+          inputSource: storySource
         })
       });
 
@@ -433,14 +523,24 @@ export default function Dashboard({
         throw new Error(data.error || 'Error al iniciar la generación de videos.');
       }
 
-      setSeeds([{
-        prompt: '',
-        templateId: selectedTemplate || defaultTemp?.id || '',
-        profileId: selectedProfile || defaultProf?.id || ''
-      }]);
-      setChainSeeds({});
-      setProfileChain(null);
-      setCount(1);
+      if (storySource === 'custom') {
+        if (customInputMode === 'individual') {
+          setCustomTitle('');
+          setCustomContent('');
+        } else {
+          setCustomBulkText('');
+        }
+        showToast('¡Generación iniciada con tu historia propia!', 'success');
+      } else {
+        setSeeds([{
+          prompt: '',
+          templateId: selectedTemplate || defaultTemp?.id || '',
+          profileId: selectedProfile || defaultProf?.id || ''
+        }]);
+        setChainSeeds({});
+        setProfileChain(null);
+        setCount(1);
+      }
     } catch (err) {
       setSubmitError(err.message);
     } finally {
@@ -514,269 +614,467 @@ export default function Dashboard({
                 <ListOrdered className="w-4 h-4 text-brand-primary" />
                 <span>Constructor de Videos</span>
               </h3>
-              <span className="text-[9px] font-black px-2.5 py-0.5 rounded-full bg-brand-primary/15 text-brand-primary border border-brand-primary/30 uppercase tracking-wide">
-                {profileChain ? 'Modo Cadena' : count === 1 ? '1 Video' : `Lote (${count} Videos)`}
+              <span className={`text-[9px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wide border ${
+                storySource === 'custom'
+                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                  : 'bg-brand-primary/15 text-brand-primary border-brand-primary/30'
+              }`}>
+                {storySource === 'custom'
+                  ? (customInputMode === 'bulk' ? `Lote (${parseCustomStories(customBulkText).length} Videos)` : '1 Video Propio')
+                  : (profileChain ? 'Modo Cadena' : count === 1 ? '1 Video' : `Lote (${count} Videos)`)}
               </span>
             </div>
 
-            {/* Paso 1: Cantidad de Videos / Selector Rápido */}
-            <div className="space-y-2.5">
-              <div className="flex justify-between items-center text-xs">
-                <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
-                  1. Cantidad de Videos
-                </label>
-                {profileChain && (
-                  <span className="text-[9.5px] font-bold text-emerald-400">
-                    {profileChain.length} perfiles configurados
-                  </span>
-                )}
-              </div>
-
-              {profileChain ? (
-                /* Banner Cadena de Perfiles */
-                <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-2xl p-3.5 space-y-3 animate-fadeIn">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-xl bg-brand-primary/20 text-brand-primary flex items-center justify-center shrink-0">
-                      <Link className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Cadena Secuencial Activa</span>
-                      <span className="text-xs font-black text-white truncate block">
-                        {totalChainCount} videos · {profileChain.map(p => p.profileName).join(' ➔ ')}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsChainModalOpen(true)}
-                      disabled={!!activeJob}
-                      className="flex-1 bg-black/40 hover:bg-black/60 text-white font-bold py-2 rounded-xl text-[10.5px] border border-white/10 cursor-pointer active:scale-95"
-                    >
-                      ✎ Editar Cadena
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleToggleChainBulkMode}
-                      disabled={!!activeJob}
-                      className={`px-3 py-2 rounded-xl text-[10.5px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
-                        chainBulkMode
-                          ? 'bg-brand-primary text-white border-brand-primary shadow-md shadow-brand-primary/20'
-                          : 'bg-black/40 hover:bg-black/60 text-gray-300 border-white/10'
-                      }`}
-                      title={chainBulkMode ? 'Desactivar pegado masivo para editar por video individual' : 'Activar pegado masivo por renglones'}
-                    >
-                      <ClipboardList className="w-3.5 h-3.5" />
-                      <span>{chainBulkMode ? '✓ Pegado Masivo' : '📋 Pegado Masivo'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setProfileChain(null); setChainSeeds({}); }}
-                      disabled={!!activeJob}
-                      className="px-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 rounded-xl text-[10.5px] border border-red-500/20 cursor-pointer active:scale-95"
-                    >
-                      Modo Simple
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Selector Rápido Clásico */
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={count}
-                      onChange={(e) => handleCountChange(e.target.value)}
-                      disabled={!!activeJob}
-                      className="bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-sm text-white font-bold w-18 text-center focus:border-brand-primary disabled:opacity-50"
-                    />
-                    <div className="flex-1 grid grid-cols-5 gap-1.5">
-                      {[1, 2, 3, 5, 10].map((num) => (
-                        <button
-                          key={num}
-                          type="button"
-                          onClick={() => handleCountChange(num)}
-                          disabled={!!activeJob}
-                          className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer ${
-                            count === num
-                              ? 'bg-brand-primary text-white shadow-md shadow-brand-primary/25 border border-brand-primary'
-                              : 'bg-black/40 hover:bg-black/60 text-gray-400 hover:text-white border border-white/5'
-                          } disabled:opacity-50 active:scale-95`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleSwitchInputMode(seedInputMode === 'bulk' ? 'individual' : 'bulk')}
-                      disabled={!!activeJob || !!profileChain}
-                      className={`w-full py-2 rounded-xl text-[11px] font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border ${
-                        seedInputMode === 'bulk'
-                          ? 'bg-brand-primary text-white border-brand-primary shadow-md shadow-brand-primary/20'
-                          : 'bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 text-gray-300 hover:text-white border-white/10'
-                      }`}
-                    >
-                      <ClipboardList className="w-3.5 h-3.5" />
-                      <span>{seedInputMode === 'bulk' ? '✓ Pegado Masivo' : '📋 Pegado Masivo'}</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsChainModalOpen(true)}
-                      disabled={!!activeJob}
-                      className="w-full bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 border border-white/10 text-gray-300 hover:text-white font-extrabold py-2 rounded-xl text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
-                    >
-                      <Link className="w-3.5 h-3.5 text-brand-primary" />
-                      <span>Cadena Perfiles</span>
-                    </button>
-                  </div>
-                </div>
-              )}
+            {/* Selector de Modo: IA vs Historia Propia (Sin API) */}
+            <div className="grid grid-cols-2 p-1 bg-black/40 border border-white/10 rounded-2xl gap-1">
+              <button
+                type="button"
+                onClick={() => setStorySource('ai')}
+                disabled={!!activeJob}
+                className={`py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  storySource === 'ai'
+                    ? 'bg-brand-primary text-white shadow-lg shadow-brand-primary/30 border border-brand-primary/50'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Generar con IA</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setStorySource('custom')}
+                disabled={!!activeJob}
+                className={`py-2 px-3 rounded-xl font-black text-xs transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  storySource === 'custom'
+                    ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg shadow-amber-500/25 border border-amber-400/50'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Historia Propia</span>
+                <span className="text-[9px] bg-black/30 border border-white/20 px-1.5 py-0.5 rounded-full uppercase tracking-tighter text-amber-200">Sin API</span>
+              </button>
             </div>
 
-            {/* Paso 2: Ideas & Prompts de Historias */}
-            <div className="space-y-2.5">
-              <div className="flex justify-between items-center text-xs">
-                <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
-                  2. Idea del Video o Tema
-                </label>
-              </div>
+            {/* CONTENIDO SEGÚN MODO: IA vs HISTORIA PROPIA */}
+            {storySource === 'ai' ? (
+              <>
+                {/* Paso 1: Cantidad de Videos / Selector Rápido */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
+                      1. Cantidad de Videos
+                    </label>
+                    {profileChain && (
+                      <span className="text-[9.5px] font-bold text-emerald-400">
+                        {profileChain.length} perfiles configurados
+                      </span>
+                    )}
+                  </div>
 
-              {/* Input Area según Modo */}
-              {profileChain ? (
-                /* Modo Cadena */
-                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
-                  {profileChain.map((item) => (
-                    <div key={item.profileId} className="bg-black/30 p-3 rounded-2xl border border-white/10 space-y-2.5">
-                      <div className="flex items-center justify-between text-[11px] font-black text-white">
-                        <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full bg-brand-primary" />
-                          {item.profileName} ({item.count} {item.count === 1 ? 'video' : 'videos'})
-                        </span>
-                        <span className="text-[9px] text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full font-bold border border-brand-primary/20">
-                          {item.templateName}
-                        </span>
-                      </div>
-
-                      {chainBulkMode ? (
-                        /* Pegado Masivo Activado: Textarea por líneas */
-                        <div className="space-y-1">
-                          <textarea
-                            value={chainBulkTexts[item.profileId] !== undefined ? chainBulkTexts[item.profileId] : (chainSeeds[item.profileId] || []).join('\n')}
-                            onChange={(e) => handleChainBulkTextChange(item.profileId, e.target.value)}
-                            placeholder={`Pega las ${item.count} ideas para ${item.profileName} (1 por renglón)...`}
-                            rows={Math.max(2, Math.min(5, item.count || 2))}
-                            disabled={!!activeJob}
-                            className="w-full bg-black/50 border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium custom-scrollbar"
-                          />
-                          <span className="text-[9px] text-gray-500 block">
-                            ✔ {(chainSeeds[item.profileId] || []).filter(Boolean).length} de {item.count} ideas completadas
+                  {profileChain ? (
+                    /* Banner Cadena de Perfiles */
+                    <div className="bg-brand-primary/10 border border-brand-primary/30 rounded-2xl p-3.5 space-y-3 animate-fadeIn">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-brand-primary/20 text-brand-primary flex items-center justify-center shrink-0">
+                          <Link className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <span className="text-[9.5px] font-bold text-gray-400 uppercase block">Cadena Secuencial Activa</span>
+                          <span className="text-xs font-black text-white truncate block">
+                            {totalChainCount} videos · {profileChain.map(p => p.profileName).join(' ➔ ')}
                           </span>
                         </div>
-                      ) : (
-                        /* Pegado Masivo Desactivado: Inputs individuales por video */
-                        <div className="space-y-1.5">
-                          {Array.from({ length: item.count }).map((_, vIdx) => (
-                            <div key={vIdx} className="flex items-center gap-2">
-                              <span className="text-[9.5px] font-bold text-brand-primary/80 w-14 shrink-0">
-                                Video #{vIdx + 1}:
-                              </span>
-                              <input
-                                type="text"
-                                value={(chainSeeds[item.profileId] && chainSeeds[item.profileId][vIdx]) || ''}
-                                onChange={(e) => handleChainSeedChange(item.profileId, vIdx, e.target.value)}
-                                placeholder={`Idea para ${item.profileName} #${vIdx + 1}...`}
-                                disabled={!!activeJob}
-                                className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary font-medium"
-                              />
-                            </div>
+                      </div>
+
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setIsChainModalOpen(true)}
+                          disabled={!!activeJob}
+                          className="flex-1 bg-black/40 hover:bg-black/60 text-white font-bold py-2 rounded-xl text-[10.5px] border border-white/10 cursor-pointer active:scale-95"
+                        >
+                          ✎ Editar Cadena
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleToggleChainBulkMode}
+                          disabled={!!activeJob}
+                          className={`px-3 py-2 rounded-xl text-[10.5px] font-bold border transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                            chainBulkMode
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-md shadow-brand-primary/20'
+                              : 'bg-black/40 hover:bg-black/60 text-gray-300 border-white/10'
+                          }`}
+                          title={chainBulkMode ? 'Desactivar pegado masivo para editar por video individual' : 'Activar pegado masivo por renglones'}
+                        >
+                          <ClipboardList className="w-3.5 h-3.5" />
+                          <span>{chainBulkMode ? '✓ Pegado Masivo' : '📋 Pegado Masivo'}</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setProfileChain(null); setChainSeeds({}); }}
+                          disabled={!!activeJob}
+                          className="px-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold py-2 rounded-xl text-[10.5px] border border-red-500/20 cursor-pointer active:scale-95"
+                        >
+                          Modo Simple
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Selector Rápido Clásico */
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={count}
+                          onChange={(e) => handleCountChange(e.target.value)}
+                          disabled={!!activeJob}
+                          className="bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-sm text-white font-bold w-18 text-center focus:border-brand-primary disabled:opacity-50"
+                        />
+                        <div className="flex-1 grid grid-cols-5 gap-1.5">
+                          {[1, 2, 3, 5, 10].map((num) => (
+                            <button
+                              key={num}
+                              type="button"
+                              onClick={() => handleCountChange(num)}
+                              disabled={!!activeJob}
+                              className={`py-2 rounded-xl font-bold text-xs transition-all cursor-pointer ${
+                                count === num
+                                  ? 'bg-brand-primary text-white shadow-md shadow-brand-primary/25 border border-brand-primary'
+                                  : 'bg-black/40 hover:bg-black/60 text-gray-400 hover:text-white border border-white/5'
+                              } disabled:opacity-50 active:scale-95`}
+                            >
+                              {num}
+                            </button>
                           ))}
                         </div>
-                      )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSwitchInputMode(seedInputMode === 'bulk' ? 'individual' : 'bulk')}
+                          disabled={!!activeJob || !!profileChain}
+                          className={`w-full py-2 rounded-xl text-[11px] font-extrabold transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border ${
+                            seedInputMode === 'bulk'
+                              ? 'bg-brand-primary text-white border-brand-primary shadow-md shadow-brand-primary/20'
+                              : 'bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 text-gray-300 hover:text-white border-white/10'
+                          }`}
+                        >
+                          <ClipboardList className="w-3.5 h-3.5" />
+                          <span>{seedInputMode === 'bulk' ? '✓ Pegado Masivo' : '📋 Pegado Masivo'}</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => setIsChainModalOpen(true)}
+                          disabled={!!activeJob}
+                          className="w-full bg-white/5 hover:bg-white/10 hover:border-brand-primary/40 border border-white/10 text-gray-300 hover:text-white font-extrabold py-2 rounded-xl text-[11px] transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                        >
+                          <Link className="w-3.5 h-3.5 text-brand-primary" />
+                          <span>Cadena Perfiles</span>
+                        </button>
+                      </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-              ) : seedInputMode === 'bulk' ? (
-                /* Modo Masivo */
-                <div className="space-y-1.5">
-                  <textarea
-                    value={bulkText}
-                    onChange={(e) => handleBulkTextChange(e.target.value)}
-                    placeholder="Pega varios temas o ideas separadas por renglón...&#10;Video 1: Historia de terror en el bosque&#10;Video 2: Anécdota graciosa en una entrevista"
-                    rows="5"
-                    disabled={!!activeJob}
-                    className="w-full bg-black/50 border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium custom-scrollbar"
-                  />
-                  <span className="text-[9.5px] text-gray-500 block">
-                    ✔ {count} {count === 1 ? 'video configurado' : 'videos configurados por renglones'}
-                  </span>
-                </div>
-              ) : (
-                /* Modo Individual */
-                <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1 custom-scrollbar">
-                  {seeds.map((s, idx) => (
-                    <div key={idx} className="space-y-1">
-                      {count > 1 && (
-                        <span className="text-[10px] font-black text-brand-primary uppercase">
-                          Video #{idx + 1}
-                        </span>
-                      )}
+
+                {/* Paso 2: Ideas & Prompts de Historias */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
+                      2. Idea del Video o Tema
+                    </label>
+                  </div>
+
+                  {/* Input Area según Modo */}
+                  {profileChain ? (
+                    /* Modo Cadena */
+                    <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar">
+                      {profileChain.map((item) => (
+                        <div key={item.profileId} className="bg-black/30 p-3 rounded-2xl border border-white/10 space-y-2.5">
+                          <div className="flex items-center justify-between text-[11px] font-black text-white">
+                            <span className="flex items-center gap-1.5">
+                              <span className="w-2 h-2 rounded-full bg-brand-primary" />
+                              {item.profileName} ({item.count} {item.count === 1 ? 'video' : 'videos'})
+                            </span>
+                            <span className="text-[9px] text-brand-primary bg-brand-primary/10 px-2 py-0.5 rounded-full font-bold border border-brand-primary/20">
+                              {item.templateName}
+                            </span>
+                          </div>
+
+                          {chainBulkMode ? (
+                            /* Pegado Masivo Activado: Textarea por líneas */
+                            <div className="space-y-1">
+                              <textarea
+                                value={chainBulkTexts[item.profileId] !== undefined ? chainBulkTexts[item.profileId] : (chainSeeds[item.profileId] || []).join('\n')}
+                                onChange={(e) => handleChainBulkTextChange(item.profileId, e.target.value)}
+                                placeholder={`Pega las ${item.count} ideas para ${item.profileName} (1 por renglón)...`}
+                                rows={Math.max(2, Math.min(5, item.count || 2))}
+                                disabled={!!activeJob}
+                                className="w-full bg-black/50 border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium custom-scrollbar"
+                              />
+                              <span className="text-[9px] text-gray-500 block">
+                                ✔ {(chainSeeds[item.profileId] || []).filter(Boolean).length} de {item.count} ideas completadas
+                              </span>
+                            </div>
+                          ) : (
+                            /* Pegado Masivo Desactivado: Inputs individuales por video */
+                            <div className="space-y-1.5">
+                              {Array.from({ length: item.count }).map((_, vIdx) => (
+                                <div key={vIdx} className="flex items-center gap-2">
+                                  <span className="text-[9.5px] font-bold text-brand-primary/80 w-14 shrink-0">
+                                    Video #{vIdx + 1}:
+                                  </span>
+                                  <input
+                                    type="text"
+                                    value={(chainSeeds[item.profileId] && chainSeeds[item.profileId][vIdx]) || ''}
+                                    onChange={(e) => handleChainSeedChange(item.profileId, vIdx, e.target.value)}
+                                    placeholder={`Idea para ${item.profileName} #${vIdx + 1}...`}
+                                    disabled={!!activeJob}
+                                    className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-white placeholder-gray-600 focus:border-brand-primary font-medium"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : seedInputMode === 'bulk' ? (
+                    /* Modo Masivo */
+                    <div className="space-y-1.5">
                       <textarea
-                        value={s.prompt || ''}
-                        onChange={(e) => handleSeedChange(idx, e.target.value)}
-                        placeholder={idx === 0 ? "Ej. Una historia intrigante sobre un descubrimiento secreto en el ático de una casa antigua..." : `Tema para video #${idx + 1}...`}
-                        rows={count === 1 ? "3.5" : "2"}
+                        value={bulkText}
+                        onChange={(e) => handleBulkTextChange(e.target.value)}
+                        placeholder="Pega varios temas o ideas separadas por renglón...&#10;Video 1: Historia de terror en el bosque&#10;Video 2: Anécdota graciosa en una entrevista"
+                        rows="5"
                         disabled={!!activeJob}
                         className="w-full bg-black/50 border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium custom-scrollbar"
                       />
+                      <span className="text-[9.5px] text-gray-500 block">
+                        ✔ {count} {count === 1 ? 'video configurado' : 'videos configurados por renglones'}
+                      </span>
                     </div>
-                  ))}
+                  ) : (
+                    /* Modo Individual */
+                    <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1 custom-scrollbar">
+                      {seeds.map((s, idx) => (
+                        <div key={idx} className="space-y-1">
+                          {count > 1 && (
+                            <span className="text-[10px] font-black text-brand-primary uppercase">
+                              Video #{idx + 1}
+                            </span>
+                          )}
+                          <textarea
+                            value={s.prompt || ''}
+                            onChange={(e) => handleSeedChange(idx, e.target.value)}
+                            placeholder={idx === 0 ? "Ej. Una historia intrigante sobre un descubrimiento secreto en el ático de una casa antigua..." : `Tema para video #${idx + 1}...`}
+                            rows={count === 1 ? "3.5" : "2"}
+                            disabled={!!activeJob}
+                            className="w-full bg-black/50 border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:border-brand-primary resize-none font-medium custom-scrollbar"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {/* Paso 3: Selección de Plantilla y Perfil */}
-            {!profileChain && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
-                    Plantilla Visual & Voz
-                  </label>
-                  <select
-                    value={selectedTemplate}
-                    onChange={(e) => handleSelectTemplate(e.target.value)}
-                    disabled={!!activeJob}
-                    className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-brand-primary cursor-pointer disabled:opacity-50"
-                  >
-                    {templates.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
+                {/* Paso 3: Selección de Plantilla y Perfil */}
+                {!profileChain && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
+                        Plantilla Visual & Voz
+                      </label>
+                      <select
+                        value={selectedTemplate}
+                        onChange={(e) => handleSelectTemplate(e.target.value)}
+                        disabled={!!activeJob}
+                        className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-brand-primary cursor-pointer disabled:opacity-50"
+                      >
+                        {templates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
+                        Perfil de IA / Modelo
+                      </label>
+                      <select
+                        value={selectedProfile}
+                        onChange={(e) => handleSelectProfile(e.target.value)}
+                        disabled={!!activeJob}
+                        className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-brand-primary cursor-pointer disabled:opacity-50"
+                      >
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.model})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              /* MODO HISTORIA PROPIA (SIN API DE GEMINI) */
+              <>
+                {/* Paso 1: Modo de Entrada */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
+                      1. Formato de Entrada
+                    </label>
+                    <span className="text-[9.5px] font-bold text-amber-400">
+                      0 Tokens · Gemini API Omitida
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setCustomInputMode('individual')}
+                      disabled={!!activeJob}
+                      className={`py-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border ${
+                        customInputMode === 'individual'
+                          ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/20'
+                          : 'bg-white/5 hover:bg-white/10 hover:border-amber-400/40 text-gray-300 hover:text-white border-white/10'
+                      }`}
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      <span>1 Historia Individual</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomInputMode('bulk')}
+                      disabled={!!activeJob}
+                      className={`py-2 rounded-xl text-[11px] font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95 border ${
+                        customInputMode === 'bulk'
+                          ? 'bg-amber-500 text-white border-amber-400 shadow-md shadow-amber-500/20'
+                          : 'bg-white/5 hover:bg-white/10 hover:border-amber-400/40 text-gray-300 hover:text-white border-white/10'
+                      }`}
+                    >
+                      <ClipboardList className="w-3.5 h-3.5" />
+                      <span>Lote de Historias (---)</span>
+                    </button>
+                  </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-wider block">
-                    Perfil de IA / Modelo
-                  </label>
-                  <select
-                    value={selectedProfile}
-                    onChange={(e) => handleSelectProfile(e.target.value)}
-                    disabled={!!activeJob}
-                    className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-brand-primary cursor-pointer disabled:opacity-50"
-                  >
-                    {profiles.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.model})</option>
-                    ))}
-                  </select>
+                {/* Paso 2: Contenido de la Historia */}
+                <div className="space-y-2.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <label className="font-black text-gray-400 uppercase tracking-wider text-[10.5px]">
+                      2. Texto de la Historia
+                    </label>
+                    {customInputMode === 'individual' ? (
+                      <span className="text-[9.5px] text-gray-400 font-medium">
+                        {customContent.trim().length > 0
+                          ? `${customContent.trim().split(/\s+/).filter(Boolean).length} palabras · ${customContent.length} car.`
+                          : 'Pega el texto abajo'}
+                      </span>
+                    ) : (
+                      <span className="text-[9.5px] font-bold text-amber-400">
+                        {parseCustomStories(customBulkText).length} {parseCustomStories(customBulkText).length === 1 ? 'historia detectada' : 'historias detectadas'}
+                      </span>
+                    )}
+                  </div>
+
+                  {customInputMode === 'individual' ? (
+                    <div className="space-y-2.5">
+                      <input
+                        type="text"
+                        value={customTitle}
+                        onChange={(e) => setCustomTitle(e.target.value)}
+                        placeholder="Título del Video (Opcional - se extrae de la 1ra línea si se omite)"
+                        disabled={!!activeJob}
+                        className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:border-amber-500 font-bold"
+                      />
+                      <textarea
+                        value={customContent}
+                        onChange={(e) => setCustomContent(e.target.value)}
+                        placeholder="Pega aquí el texto completo o historia que deseas narrar en el video...&#10;&#10;Ejemplo:&#10;Descubrí un secreto familiar que lo cambió todo. Hace dos semanas mientras limpiaba el desván de mi abuelo..."
+                        rows="8"
+                        disabled={!!activeJob}
+                        className="w-full bg-black/50 border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:border-amber-500 resize-none font-medium custom-scrollbar"
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-[10px] text-amber-200/90 leading-relaxed">
+                        💡 <strong>Pegado por Lotes:</strong> Separa cada historia pegando una línea con <code className="bg-black/40 px-1 py-0.5 rounded text-amber-300">---</code> entre ellas. La primera línea de cada bloque se usará como título para la tarjeta de Reddit.
+                      </div>
+                      <textarea
+                        value={customBulkText}
+                        onChange={(e) => setCustomBulkText(e.target.value)}
+                        placeholder={"Título: Historia 1 de Prueba\nTexto completo de la primera historia aquí...\n\n---\n\nTítulo: Historia 2 de Prueba\nTexto completo de la segunda historia aquí..."}
+                        rows="9"
+                        disabled={!!activeJob}
+                        className="w-full bg-black/50 border border-white/10 rounded-2xl p-3 text-xs text-white placeholder-gray-600 focus:border-amber-500 resize-none font-medium custom-scrollbar"
+                      />
+                    </div>
+                  )}
                 </div>
-              </div>
+
+                {/* Paso 3: Plantilla Visual & Locución de Plantilla */}
+                <div className="space-y-2 pt-1">
+                  <label className="text-[10.5px] font-black text-gray-400 uppercase tracking-wider block">
+                    3. Plantilla Visual & Locución
+                  </label>
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
+                          Plantilla Visual
+                        </label>
+                        <select
+                          value={selectedTemplate}
+                          onChange={(e) => handleSelectTemplate(e.target.value)}
+                          disabled={!!activeJob}
+                          className="w-full bg-black/50 border border-white/10 rounded-2xl px-3 py-2 text-xs text-white font-bold focus:border-amber-500 cursor-pointer disabled:opacity-50"
+                        >
+                          {templates.map(t => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-2.5 flex flex-col justify-center">
+                        <div className="flex items-center gap-1.5 text-emerald-400 font-black text-[11px]">
+                          <Zap className="w-3.5 h-3.5 shrink-0" />
+                          <span>0 Tokens · API Omitida</span>
+                        </div>
+                        <p className="text-[9.5px] text-gray-400 font-medium mt-0.5 leading-tight">
+                          No requiere API Key. Síntesis Edge-TTS y render NVENC directos.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Fila informativa de la voz configurada en la plantilla */}
+                    {(() => {
+                      const curTmpl = templates.find(t => t.id === selectedTemplate) || templates[0];
+                      const mVoiceName = curTmpl?.maleVoice ? curTmpl.maleVoice.split('-').slice(2).join(' ') : 'Masculina';
+                      const fVoiceName = curTmpl?.femaleVoice ? curTmpl.femaleVoice.split('-').slice(2).join(' ') : 'Femenina';
+                      const nMode = curTmpl?.narratorGender === 'female' 
+                        ? `Femenina (${fVoiceName})` 
+                        : (curTmpl?.narratorGender === 'auto' ? `Auto por historia (${mVoiceName} / ${fVoiceName})` : `Masculina (${mVoiceName})`);
+                      return (
+                        <div className="bg-black/40 border border-white/5 rounded-xl p-2.5 flex items-center justify-between text-[10.5px]">
+                          <span className="text-gray-300 font-medium flex items-center gap-1.5">
+                            <span className="text-amber-400">🎙️</span>
+                            <span className="text-gray-400">Locución de plantilla:</span>
+                            <span className="text-white font-black">{nMode}</span>
+                          </span>
+                          <span className="text-amber-400/90 font-mono text-[9.5px] bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20 font-bold">
+                            {curTmpl?.voiceRate || '+0%'} vel.
+                          </span>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </>
             )}
 
             {/* Alertas de Error / Éxito */}
@@ -839,12 +1137,25 @@ export default function Dashboard({
             <button
               type="submit"
               disabled={isSubmitting || !!activeJob}
-              className="w-full bg-gradient-to-r from-brand-primary to-orange-500 hover:from-orange-600 hover:to-amber-500 text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer shadow-xl shadow-brand-primary/25 disabled:opacity-40 disabled:scale-100 active:scale-97"
+              className={`w-full text-white font-black py-4 rounded-2xl text-xs uppercase tracking-widest transition-all duration-200 flex items-center justify-center gap-2.5 cursor-pointer shadow-xl disabled:opacity-40 disabled:scale-100 active:scale-97 ${
+                storySource === 'custom'
+                  ? 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-600 hover:to-orange-600 shadow-amber-500/25 border border-amber-400/40'
+                  : 'bg-gradient-to-r from-brand-primary to-orange-500 hover:from-orange-600 hover:to-amber-500 shadow-brand-primary/25'
+              }`}
             >
               {isSubmitting || activeJob ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin text-white" />
                   <span>PRODUCIENDO COLA EN SEGUNDO PLANO...</span>
+                </>
+              ) : storySource === 'custom' ? (
+                <>
+                  <Play className="w-5 h-5 fill-current text-white" />
+                  <span>
+                    {customInputMode === 'bulk'
+                      ? `RENDERIZAR LOTE (${parseCustomStories(customBulkText).length} HISTORIAS SIN API)`
+                      : 'RENDERIZAR HISTORIA DIRECTA (0 TOKENS)'}
+                  </span>
                 </>
               ) : (
                 <>

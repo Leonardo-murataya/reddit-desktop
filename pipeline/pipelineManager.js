@@ -47,7 +47,8 @@ async function runSingleVideo({
   exportFolder,
   normalizedBatch,
   broadcastProgress,
-  getStatus
+  getStatus,
+  onScriptReady
 }) {
   const videoNumStr = `[Video ${job.currentVideoIndex}/${job.totalCount}]`;
   const isCancelRequested = getStatus().isCancelRequested;
@@ -61,16 +62,58 @@ async function runSingleVideo({
 
   try {
     // -----------------------------------------------------------------
-    // ETAPA 1: Generación de Guion con IA (Google Gemini)
+    // ETAPA 1: Generación de Guion con IA (Google Gemini o Prefetch)
     // -----------------------------------------------------------------
-    const { story, currentPrompt } = await executeScriptStage({
-      profile,
-      template,
-      prompt: currentItem.prompt,
-      videoNumStr,
-      broadcastProgress,
-      job
-    });
+    let scriptData = null;
+
+    if (currentItem.prefetchedScriptPromise) {
+      broadcastProgress({
+        type: 'status',
+        status: 'processing',
+        activeJob: job,
+        log: `${videoNumStr} ⚡ Esperando guion pre-generado en segundo plano...`
+      });
+      try {
+        scriptData = await currentItem.prefetchedScriptPromise;
+      } catch (err) {
+        console.warn(`[Prefetch] Error esperando prefetch para ${videoNumStr}:`, err.message);
+        scriptData = null;
+      }
+    }
+
+    if (!scriptData) {
+      scriptData = await executeScriptStage({
+        profile,
+        template,
+        prompt: currentItem.prompt,
+        customStory: currentItem.customStory,
+        videoNumStr,
+        broadcastProgress,
+        job,
+        isPrefetch: false
+      });
+    } else {
+      job.stage = 'script';
+      job.progress = 15;
+      job.currentStep = 'Guion pre-generado listo';
+      broadcastProgress({
+        type: 'status',
+        status: 'processing',
+        activeJob: job,
+        log: `${videoNumStr} ⚡ ¡Guion ya estaba listo! Título: "${scriptData.story.title}". Pasando directamente a voz...`
+      });
+    }
+
+    const { story, currentPrompt } = scriptData;
+
+    // Disparar en segundo plano la pre-generación del siguiente video mientras este renderiza
+    if (typeof onScriptReady === 'function') {
+      try {
+        onScriptReady();
+      } catch (err) {
+        console.warn('[Prefetch] Error al invocar onScriptReady:', err.message);
+      }
+    }
 
     if (isCancelRequested()) throw new Error('La generación fue cancelada por solicitud del usuario.');
 

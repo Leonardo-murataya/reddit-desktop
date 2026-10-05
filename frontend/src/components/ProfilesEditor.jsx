@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Save, Plus, Trash2, KeyRound, Cpu, FileText, CheckCircle2, FolderOpen, Eye, EyeOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { Save, Plus, Trash2, KeyRound, Cpu, FileText, CheckCircle2, FolderOpen, Eye, EyeOff, ChevronDown, ChevronUp, Search, RefreshCw } from 'lucide-react';
 import { useUIModal } from '../context/UIModalContext';
 
 const GEMINI_MODELS = [
@@ -23,7 +23,10 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
   const [backgroundFolder, setBackgroundFolder] = useState('');
   const [primaryAttempts, setPrimaryAttempts] = useState(2);
   const [fallbackAttempts, setFallbackAttempts] = useState(3);
+  const [maxOutputTokens, setMaxOutputTokens] = useState(1200);
   const [fallbackModels, setFallbackModels] = useState(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
+  const [availableModelOptions, setAvailableModelOptions] = useState(GEMINI_MODELS);
+  const [detectingModels, setDetectingModels] = useState(false);
   const [success, setSuccess] = useState('');
 
   const toggleKeyVisibility = (index) => {
@@ -43,6 +46,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setBackgroundFolder(prof.backgroundFolder || '');
     setPrimaryAttempts(prof.primaryAttempts !== undefined ? parseInt(prof.primaryAttempts) : 2);
     setFallbackAttempts(prof.fallbackAttempts !== undefined ? parseInt(prof.fallbackAttempts) : 3);
+    setMaxOutputTokens(prof.maxOutputTokens !== undefined ? parseInt(prof.maxOutputTokens) : 1200);
     
     let loadedModels = prof.fallbackModels && Array.isArray(prof.fallbackModels) && prof.fallbackModels.length > 0
       ? [...prof.fallbackModels]
@@ -89,8 +93,46 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setBackgroundFolder('');
     setPrimaryAttempts(2);
     setFallbackAttempts(3);
+    setMaxOutputTokens(1200);
     setFallbackModels(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
     setSuccess('');
+  };
+
+  const handleDetectModels = async () => {
+    const validKeys = apiKeys.map(k => k.trim()).filter(Boolean);
+    if (validKeys.length === 0) {
+      showToast('Introduce al menos una API Key para detectar modelos de Google Gemini.', 'warning');
+      return;
+    }
+
+    setDetectingModels(true);
+    try {
+      const res = await fetch('/api/profiles/available-models', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey: validKeys.join('\n') })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Error al consultar modelos');
+      }
+
+      if (data.models && Array.isArray(data.models) && data.models.length > 0) {
+        const newOptions = data.models.map(m => ({
+          value: m.id,
+          label: m.name || m.id
+        }));
+        setAvailableModelOptions(newOptions);
+        showToast(`¡Se detectaron ${data.models.length} modelos compatibles con tu cuenta de Gemini!`, 'success');
+      } else {
+        showToast('No se recibieron modelos adicionales. Se mantienen los modelos estándar.', 'info');
+      }
+    } catch (err) {
+      console.error('Error detectando modelos:', err);
+      showToast(`Error al detectar modelos: ${err.message}`, 'error');
+    } finally {
+      setDetectingModels(false);
+    }
   };
 
   const handlePickFolder = async () => {
@@ -146,6 +188,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
       primaryAttempts: parseInt(primaryAttempts) || 2,
       fallbackAttempts: parseInt(fallbackAttempts) || 3,
       maxAttempts: (parseInt(primaryAttempts) || 2) + (parseInt(fallbackAttempts) || 3),
+      maxOutputTokens: parseInt(maxOutputTokens) || 1200,
       fallbackModels: [...finalModels],
       fallbackModel: finalModels[1] || finalModels[0]
     });
@@ -324,8 +367,8 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
               </span>
             </div>
 
-            {/* Robustez y Modelo de Respaldo */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/25 p-4 rounded-xl border border-border-dark">
+            {/* Robustez, Tokens y Modelos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-black/25 p-4 rounded-xl border border-border-dark">
               <div className="space-y-2">
                 <label className="block text-xs font-bold text-gray-400 uppercase">Intentos Mod. Principal</label>
                 <input
@@ -357,12 +400,40 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-xs font-bold text-gray-400 uppercase">Modelos de IA (Prioridad Secuencial)</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase">Tokens Máx. Salida</label>
+                <input
+                  type="number"
+                  min="300"
+                  max="8192"
+                  step="50"
+                  value={maxOutputTokens}
+                  onChange={(e) => setMaxOutputTokens(Math.max(300, Math.min(8192, parseInt(e.target.value) || 1200)))}
+                  className="w-full bg-black/40 border border-border-dark rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-brand-primary transition-all duration-200 font-bold"
+                />
+                <span className="text-[9px] text-gray-500 block leading-tight">
+                  Límite de generación (~1200 tokens ≈ 800 palabras).
+                </span>
+              </div>
+
+              <div className="space-y-2 sm:col-span-2 lg:col-span-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-gray-400 uppercase">Modelos de IA</label>
+                  <button
+                    type="button"
+                    onClick={handleDetectModels}
+                    disabled={detectingModels}
+                    className="flex items-center gap-1 text-[10px] text-brand-primary hover:text-white font-bold cursor-pointer transition-colors"
+                    title="Detectar modelos compatibles con tus API Keys"
+                  >
+                    <Search className={`w-3 h-3 ${detectingModels ? 'animate-spin' : ''}`} />
+                    <span>{detectingModels ? 'Buscando...' : 'Detectar'}</span>
+                  </button>
+                </div>
                 
                 {/* Lista de modelos configurados */}
                 <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
                   {fallbackModels.map((modelVal, idx) => {
-                    const modelObj = GEMINI_MODELS.find(m => m.value === modelVal) || { label: modelVal, value: modelVal };
+                    const modelObj = availableModelOptions.find(m => m.value === modelVal) || { label: modelVal, value: modelVal };
                     return (
                       <div key={idx} className="flex items-center justify-between gap-2 bg-black/30 border border-border-dark/60 rounded-xl px-3 py-2 text-xs">
                         <div className="flex items-center gap-2 min-w-0 flex-1 text-white font-bold">
@@ -408,7 +479,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                     className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-primary"
                     defaultValue="gemini-3.6-flash"
                   >
-                    {GEMINI_MODELS.map(m => (
+                    {availableModelOptions.map(m => (
                       <option key={m.value} value={m.value}>{m.label}</option>
                     ))}
                   </select>

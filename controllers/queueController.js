@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const db = require('../services/db');
 const notifier = require('../services/notifier');
 const pipelineManager = require('../pipeline/pipelineManager');
+const { executeScriptStage } = require('../pipeline/scriptStage');
 
 // Estado en memoria de la cola
 let activeJob = null;
@@ -81,6 +82,11 @@ function cancelJob() {
   isPaused = false;
   activeJob.status = 'cancelling';
   activeJob.currentStep = 'Cancelando generación...';
+  if (activeJob.videoTasks && Array.isArray(activeJob.videoTasks)) {
+    for (const item of activeJob.videoTasks) {
+      item.prefetchedScriptPromise = null;
+    }
+  }
   broadcastProgress({
     type: 'status',
     status: 'cancelling',
@@ -141,14 +147,16 @@ async function startBatch({ batchItems, prompt, count = 1, templateId, profileId
       prompt: item.prompt || prompt || '',
       count: parseInt(item.count) || 1,
       templateId: item.templateId || templateId || currentDb.settings.defaultTemplateId,
-      profileId: item.profileId || profileId || currentDb.settings.defaultProfileId
+      profileId: item.profileId || profileId || currentDb.settings.defaultProfileId,
+      customStory: item.customStory || null
     }));
   } else {
     normalizedBatch = [{
       prompt: prompt || '',
       count: parseInt(count) || 1,
       templateId: templateId || currentDb.settings.defaultTemplateId,
-      profileId: profileId || currentDb.settings.defaultProfileId
+      profileId: profileId || currentDb.settings.defaultProfileId,
+      customStory: null
     }];
   }
 
@@ -164,7 +172,9 @@ async function startBatch({ batchItems, prompt, count = 1, templateId, profileId
 
   activeJob = {
     id: uuidv4(),
-    prompt: normalizedBatch.length > 1 ? `Lote de ${normalizedBatch.length} plantillas` : (normalizedBatch[0].prompt || 'Generación rápida'),
+    prompt: firstItem.customStory
+      ? (normalizedBatch.length > 1 ? `Lote de ${normalizedBatch.length} historias personalizadas` : (firstItem.customStory.title || 'Historia personalizada'))
+      : (normalizedBatch.length > 1 ? `Lote de ${normalizedBatch.length} plantillas` : (normalizedBatch[0].prompt || 'Generación rápida')),
     totalCount: totalVideos,
     currentVideoIndex: 1,
     status: 'starting',
@@ -243,6 +253,23 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
   isPaused = false;
   failedItems = [];
 
+  // Expandir normalizedBatch a una lista secuencial de videos individuales (1 objeto por video)
+  const videoTasks = [];
+  for (const item of normalizedBatch) {
+    const c = parseInt(item.count) || 1;
+    for (let i = 0; i < c; i++) {
+      videoTasks.push({
+        prompt: item.prompt,
+        templateId: item.templateId,
+        profileId: item.profileId,
+        customStory: item.customStory,
+        count: 1,
+        prefetchedScriptPromise: null
+      });
+    }
+  }
+  job.videoTasks = videoTasks;
+
   const currentDb = db.readDb();
   const defaultExportFolder = currentDb.settings.exportFolder || path.join(__dirname, '..', 'temp');
   const batchReportItems = [];
@@ -302,16 +329,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
 
       job.currentVideoIndex = index + 1;
 
-      // Determinar plantilla y perfil para este video
-      let accumulatedCount = 0;
-      let currentItem = null;
-      for (const item of normalizedBatch) {
-        accumulatedCount += item.count;
-        if (index < accumulatedCount) {
-          currentItem = item;
-          break;
-        }
-      }
+      // Obtener configuración del video actual a partir de videoTasks
+      const currentItem = videoTasks[index] || normalizedBatch[0];
 
       if (!currentItem) {
         throw new Error('Error al determinar la plantilla del lote actual.');
@@ -339,6 +358,40 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           ? freshDb.settings.exportFolder.trim()
           : defaultExportFolder;
 
+      // Callback disparado tan pronto como el guion del video actual esté listo
+      const nextIndex = index + 1;
+      const handleScriptReady = () => {
+        if (nextIndex < job.totalCount && !cancelRequested) {
+          const nextItem = videoTasks[nextIndex];
+          if (nextItem && !nextItem.customStory && !nextItem.prefetchedScriptPromise) {
+            const nextDb = db.readDb();
+            const nextTemplate = nextDb.templates.find(t => t.id === nextItem.templateId) || nextDb.templates[0];
+            const nextProfId = nextItem.profileId || nextTemplate?.profileId || nextDb.settings.defaultProfileId;
+            const nextProfile = nextDb.profiles.find(p => p.id === nextProfId) || nextDb.profiles[0];
+            const nextVideoNumStr = `[Video ${nextIndex + 1}/${job.totalCount}]`;
+
+            broadcastProgress({
+              type: 'log',
+              log: `${nextVideoNumStr} ⚡ Pre-generando guion en segundo plano con Gemini mientras se procesa el video actual...`
+            });
+
+            nextItem.prefetchedScriptPromise = executeScriptStage({
+              profile: nextProfile,
+              template: nextTemplate,
+              prompt: nextItem.prompt,
+              customStory: nextItem.customStory,
+              videoNumStr: nextVideoNumStr,
+              broadcastProgress,
+              job,
+              isPrefetch: true
+            }).catch(err => {
+              console.warn(`[Prefetch] Falló pre-generación para ${nextVideoNumStr}:`, err.message);
+              return null; // Fallback garantizado a ejecución normal en su turno
+            });
+          }
+        }
+      };
+
       try {
         const result = await pipelineManager.runSingleVideo({
           index,
@@ -350,7 +403,8 @@ async function runGenerationQueue(job, normalizedBatch, defaultBackgroundFolder)
           exportFolder,
           normalizedBatch,
           broadcastProgress,
-          getStatus
+          getStatus,
+          onScriptReady: handleScriptReady
         });
 
         batchReportItems.push(result.reportItem);

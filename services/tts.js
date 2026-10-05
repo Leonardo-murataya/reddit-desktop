@@ -57,6 +57,45 @@ function splitTextIntoChunks(text, maxChunkLength = 4000) {
 }
 
 /**
+ * Sanitiza a fondo un texto para síntesis natural con Edge-TTS.
+ * Elimina marcas markdown (**negrita**, *cursiva*), acotaciones no verbales, emojis y caracteres extraños.
+ */
+function sanitizeForTTS(text) {
+  if (!text) return '';
+  return text
+    // 1. Corregir erratas frecuentes de español
+    .replace(/\banos\b/g, 'años')
+    .replace(/\bAnos\b/g, 'Años')
+    .replace(/\bANOS\b/g, 'AÑOS')
+    // 2. Eliminar líneas de separación de tablas markdown (ej: |---|---|)
+    .replace(/^\s*\|?[\s\-:|]+\|[\s\-:|]*$/gm, '')
+    // 3. Eliminar formato markdown preservando el texto interior
+    .replace(/\*\*([^*]+)\*\*/g, (_, m) => m)
+    .replace(/\*([^*]+)\*/g, (_, m) => m)
+    .replace(/__([^_]+)__/g, (_, m) => m)
+    .replace(/_([^_]+)_/g, (_, m) => m)
+    .replace(/~~([^~]+)~~/g, (_, m) => m)
+    .replace(/`([^`]+)`/g, (_, m) => m)
+    // 4. Eliminar caracteres markdown sueltos
+    .replace(/[*_~^]/g, '')
+    // 5. Guiones largos a coma para pausa natural
+    .replace(/[—–]/g, ', ')
+    // 6. Eliminar acotaciones no verbales típicas en paréntesis o corchetes: (risas), [suspiros], etc.
+    .replace(/\s*[([][^()\[\]]*(?:risas?|suspiros?|pausa|m[uú]sica|silencio|aplausos?|gritos?|llanto)[^()\[\]]*[)\]]\s*/gi, ' ')
+    // 7. Eliminar emojis y pictogramas
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, '')
+    // 8. Normalizar comillas y barras
+    .replace(/[""«»]/g, '"')
+    .replace(/[|\\#]/g, ' ')
+    // 9. Normalizar comas dobles
+    .replace(/,\s*,+/g, ',')
+    // 10. Normalizar espacios múltiples
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n\n')
+    .trim();
+}
+
+/**
  * Genera el audio para un texto dado y extrae los metadatos de sincronización de palabras (timestamps).
  * Segmenta textos muy largos para evitar cortes en WebSocket de la API de Edge TTS.
  * @param {string} text - El texto a convertir a voz
@@ -68,11 +107,8 @@ function splitTextIntoChunks(text, maxChunkLength = 4000) {
 async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options = {}, onProgress = () => {}) {
   const { EdgeTTS } = require('@andresaya/edge-tts');
   
-  // Auto-corregir erratas comunes de ortografía (ej. 'anos' -> 'años') para que la locución no diga 'anos'
-  const cleanText = (text || '')
-    .replace(/\banos\b/g, 'años')
-    .replace(/\bAnos\b/g, 'Años')
-    .replace(/\bANOS\b/g, 'AÑOS');
+  // Sanitizar a fondo el texto para dicción fluida y sin artefactos en Edge-TTS
+  const cleanText = sanitizeForTTS(text);
 
   // Creamos la carpeta contenedora del audio si no existe
   const dir = path.dirname(outputAudioPath);
@@ -349,5 +385,6 @@ function concatAudioFiles(filePaths, outputPath) {
 
 module.exports = {
   generateSpeechAndTimestamps,
-  concatAudioFiles
+  concatAudioFiles,
+  sanitizeForTTS
 };

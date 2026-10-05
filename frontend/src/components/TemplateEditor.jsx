@@ -131,6 +131,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   const [defaultIdea, setDefaultIdea] = useState(''); // Semilla/Idea por defecto
   const [maleVoice, setMaleVoice] = useState('es-MX-JorgeNeural');
   const [femaleVoice, setFemaleVoice] = useState('es-MX-DaliaNeural');
+  const [narratorGender, setNarratorGender] = useState('male'); // 'male' | 'female' | 'auto'
   const [voiceRate, setVoiceRate] = useState('+0%'); // Velocidad de las voces
   const [font, setFont] = useState('Arial Bold');
   const [fontSize, setFontSize] = useState(100);
@@ -371,6 +372,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setDefaultIdea(active.defaultIdea || '');
         setMaleVoice(active.maleVoice);
         setFemaleVoice(active.femaleVoice);
+        setNarratorGender(active.narratorGender || 'male');
         setVoiceRate(active.voiceRate || '+0%');
         setFont(active.font);
         setFontSize(active.fontSize || 24);
@@ -581,6 +583,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setDefaultIdea('');
     setMaleVoice('es-MX-JorgeNeural');
     setFemaleVoice('es-MX-DaliaNeural');
+    setNarratorGender('male');
     setVoiceRate('+0%');
     setFont('Arial Bold');
     setFontSize(100);
@@ -1061,6 +1064,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       defaultIdea: defaultIdea || undefined, // Guardar la idea por defecto
       maleVoice,
       femaleVoice,
+      narratorGender: narratorGender || 'male',
       voiceRate,
       font,
       fontSize: parseInt(fontSize),
@@ -2323,6 +2327,22 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                           <option key={v.value} value={v.value}>{v.label}</option>
                         ))}
                       </select>
+                    </div>
+
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider">Narrador Principal de la Plantilla</label>
+                      <select
+                        value={narratorGender}
+                        onChange={(e) => setNarratorGender(e.target.value)}
+                        className="w-full bg-black/40 border border-border-dark rounded-xl p-2.5 text-xs text-white font-semibold"
+                      >
+                        <option value="male">Voz Masculina Predeterminada ({EDGE_VOICES.find(v => v.value === maleVoice)?.label || maleVoice})</option>
+                        <option value="female">Voz Femenina Predeterminada ({EDGE_VOICES.find(v => v.value === femaleVoice)?.label || femaleVoice})</option>
+                        <option value="auto">Automático por contexto (según la historia)</option>
+                      </select>
+                      <span className="text-[9px] text-gray-500 block mt-0.5">
+                        Define la voz que narrará los videos de esta plantilla (o déjalo en automático si prefieres que se detecte por el texto).
+                      </span>
                     </div>
                   </div>
 
