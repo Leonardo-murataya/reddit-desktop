@@ -322,7 +322,7 @@ async function generateStory(
       },
       content: {
         type: 'STRING',
-        description: 'El cuerpo de la historia. Debe estar redactado en primera persona de manera fluida, natural, interesante y cautivadora, listo para ser convertido a audio sin marcas raras ni emojis (excepto puntuación normal).'
+        description: 'El cuerpo de la historia completa. Debe estar redactado en primera persona de manera fluida, natural y con amplio desarrollo dramático, respetando estrictamente la meta de palabras y extensión especificada en las instrucciones del sistema, listo para ser convertido a audio sin marcas raras ni emojis (excepto puntuación normal).'
       },
       gender: {
         type: 'STRING',
@@ -341,6 +341,7 @@ Reglas estrictas de redacción:
 - Debe parecer una publicación real de Reddit en foros como r/nosleep, r/confessions, o r/AskReddit.
 - Empieza directamente con el relato, sin introducciones decorativas como "Aquí tienes tu historia".
 - Evita caracteres especiales extraños o emojis, ya que esto será leído por un sintetizador de voz (TTS).
+- REQUISITO CRÍTICO DE EXTENSIÓN: Desarrolla el relato con máxima minuciosidad y progresión dramática, detallando los acontecimientos día a día, las confrontaciones y los giros para cumplir rigurosamente con la meta de palabras indicada en tus instrucciones del sistema. No resumas ni apresures el desenlace; desglosa los hechos con la amplitud necesaria para alcanzar la extensión completa requerida.
 `;
 
   const maxAttempts = (parseInt(primaryAttempts) || 2) + (parseInt(fallbackAttempts) || 3);
