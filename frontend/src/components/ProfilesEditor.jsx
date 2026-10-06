@@ -406,7 +406,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                   type="number"
                   min="1000"
                   max="16384"
-                  step="100"
+                  step="1"
                   value={maxOutputTokens}
                   onChange={(e) => setMaxOutputTokens(Math.max(1000, Math.min(16384, parseInt(e.target.value) || 8192)))}
                   className="w-full bg-black/40 border border-border-dark rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-brand-primary transition-all duration-200 font-bold"
