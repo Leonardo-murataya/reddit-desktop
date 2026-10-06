@@ -189,7 +189,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
       primaryAttempts: parseInt(primaryAttempts) || 2,
       fallbackAttempts: parseInt(fallbackAttempts) || 3,
       maxAttempts: (parseInt(primaryAttempts) || 2) + (parseInt(fallbackAttempts) || 3),
-      maxOutputTokens: parseInt(maxOutputTokens) || 1200,
+      maxOutputTokens: parseInt(maxOutputTokens) || 8192,
       fallbackModels: [...finalModels],
       fallbackModel: finalModels[1] || finalModels[0]
     });
@@ -377,7 +377,8 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                   min="1"
                   max="10"
                   value={primaryAttempts}
-                  onChange={(e) => setPrimaryAttempts(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                  onChange={(e) => setPrimaryAttempts(e.target.value)}
+                  onBlur={() => setPrimaryAttempts(Math.max(1, Math.min(10, parseInt(primaryAttempts) || 2)))}
                   className="w-full bg-black/40 border border-border-dark rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-brand-primary transition-all duration-200 font-bold"
                 />
                 <span className="text-[9px] text-gray-500 block leading-tight">
@@ -392,7 +393,8 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                   min="0"
                   max="10"
                   value={fallbackAttempts}
-                  onChange={(e) => setFallbackAttempts(Math.max(0, Math.min(10, parseInt(e.target.value) || 0)))}
+                  onChange={(e) => setFallbackAttempts(e.target.value)}
+                  onBlur={() => setFallbackAttempts(Math.max(0, Math.min(10, parseInt(fallbackAttempts) || 0)))}
                   className="w-full bg-black/40 border border-border-dark rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-brand-primary transition-all duration-200 font-bold"
                 />
                 <span className="text-[9px] text-gray-500 block leading-tight">
@@ -404,11 +406,16 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                 <label className="block text-xs font-bold text-gray-400 uppercase">Tokens Máx. Salida</label>
                 <input
                   type="number"
-                  min="1000"
-                  max="16384"
-                  step="1"
+                  min="300"
+                  max="32768"
                   value={maxOutputTokens}
-                  onChange={(e) => setMaxOutputTokens(Math.max(1000, Math.min(16384, parseInt(e.target.value) || 8192)))}
+                  onChange={(e) => setMaxOutputTokens(e.target.value)}
+                  onBlur={() => {
+                    const parsed = parseInt(maxOutputTokens);
+                    if (isNaN(parsed) || parsed < 300) setMaxOutputTokens(8192);
+                    else if (parsed > 32768) setMaxOutputTokens(32768);
+                    else setMaxOutputTokens(parsed);
+                  }}
                   className="w-full bg-black/40 border border-border-dark rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-brand-primary transition-all duration-200 font-bold"
                 />
                 <span className="text-[9px] text-gray-500 block leading-tight">
