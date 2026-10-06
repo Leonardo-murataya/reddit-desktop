@@ -46,7 +46,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setBackgroundFolder(prof.backgroundFolder || '');
     setPrimaryAttempts(prof.primaryAttempts !== undefined ? parseInt(prof.primaryAttempts) : 2);
     setFallbackAttempts(prof.fallbackAttempts !== undefined ? parseInt(prof.fallbackAttempts) : 3);
-    setMaxOutputTokens(prof.maxOutputTokens !== undefined ? parseInt(prof.maxOutputTokens) : 1200);
+    setMaxOutputTokens(prof.maxOutputTokens !== undefined ? parseInt(prof.maxOutputTokens) : 8192);
     
     let loadedModels = prof.fallbackModels && Array.isArray(prof.fallbackModels) && prof.fallbackModels.length > 0
       ? [...prof.fallbackModels]
@@ -93,7 +93,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setBackgroundFolder('');
     setPrimaryAttempts(2);
     setFallbackAttempts(3);
-    setMaxOutputTokens(1200);
+    setMaxOutputTokens(8192);
     setFallbackModels(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
     setSuccess('');
   };
@@ -403,15 +403,15 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
                 <label className="block text-xs font-bold text-gray-400 uppercase">Tokens Máx. Salida</label>
                 <input
                   type="number"
-                  min="300"
-                  max="8192"
-                  step="50"
+                  min="1000"
+                  max="16384"
+                  step="100"
                   value={maxOutputTokens}
-                  onChange={(e) => setMaxOutputTokens(Math.max(300, Math.min(8192, parseInt(e.target.value) || 1200)))}
+                  onChange={(e) => setMaxOutputTokens(Math.max(1000, Math.min(16384, parseInt(e.target.value) || 8192)))}
                   className="w-full bg-black/40 border border-border-dark rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-brand-primary transition-all duration-200 font-bold"
                 />
                 <span className="text-[9px] text-gray-500 block leading-tight">
-                  Límite de generación (~1200 tokens ≈ 800 palabras).
+                  Límite de generación (~8192 tokens recomendado para historias completas sin cortes).
                 </span>
               </div>
 

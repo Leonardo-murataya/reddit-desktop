@@ -86,6 +86,74 @@ async function listAvailableModels(apiKey) {
 }
 
 /**
+ * Intenta reparar y parsear JSON truncado o con artefactos de LLMs (self-healing parser)
+ */
+function repairAndParseJson(rawText) {
+  let cleaned = (rawText || '').trim();
+  if (cleaned.includes('```')) {
+    cleaned = cleaned.replace(/```json/gi, '').replace(/```/g, '').trim();
+  }
+
+  // 1. Intentar parseo directo
+  try {
+    return JSON.parse(cleaned);
+  } catch (initialErr) {
+    // 2. Intentar reparar si fue cortado a mitad de camino
+    const firstBrace = cleaned.indexOf('{');
+    if (firstBrace === -1) throw initialErr;
+    let textToFix = cleaned.substring(firstBrace);
+
+    let inString = false;
+    let escaped = false;
+    let openBraces = 0;
+    let openBrackets = 0;
+
+    for (let i = 0; i < textToFix.length; i++) {
+      const char = textToFix[i];
+      if (escaped) {
+        escaped = false;
+        continue;
+      }
+      if (char === '\\') {
+        escaped = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+      if (!inString) {
+        if (char === '{') openBraces++;
+        else if (char === '}') openBraces--;
+        else if (char === '[') openBrackets++;
+        else if (char === ']') openBrackets--;
+      }
+    }
+
+    let repaired = textToFix;
+    if (inString) {
+      repaired += '"'; // Cerrar comilla abierta
+    }
+    while (openBrackets > 0) {
+      repaired += ']';
+      openBrackets--;
+    }
+    while (openBraces > 0) {
+      repaired += '}';
+      openBraces--;
+    }
+
+    try {
+      const parsed = JSON.parse(repaired);
+      console.log('[Gemini] 🛠️ JSON truncado reparado exitosamente por self-healing parser');
+      return parsed;
+    } catch (secondErr) {
+      throw initialErr;
+    }
+  }
+}
+
+/**
  * Genera una historia estructurada de Reddit basada en el prompt del usuario
  */
 async function generateStory(
@@ -96,7 +164,7 @@ async function generateStory(
   primaryAttempts = 2,
   fallbackAttempts = 3,
   customFallbackModels = 'gemini-2.5-flash',
-  maxOutputTokens = 1200,
+  maxOutputTokens = 8192,
   onLog = null
 ) {
   if (!apiKey) {
@@ -274,6 +342,7 @@ Reglas estrictas de redacción:
 
   const maxAttempts = (parseInt(primaryAttempts) || 2) + (parseInt(fallbackAttempts) || 3);
   let attempt = 0;
+  let currentMaxTokens = Math.max(parseInt(maxOutputTokens) || 8192, 8192);
   const safetySettings = [
     { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
     { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
@@ -316,7 +385,7 @@ Reglas estrictas de redacción:
             responseMimeType: 'application/json',
             responseSchema: schema,
             temperature: 0.9,
-            maxOutputTokens: parseInt(maxOutputTokens) || 1200
+            maxOutputTokens: currentMaxTokens
           },
           safetySettings
         });
@@ -325,26 +394,37 @@ Reglas estrictas de redacción:
         clearTimeout(timeoutId);
       }
 
+      const candidate = result.response?.candidates?.[0];
+      const finishReason = candidate?.finishReason;
+
+      if (finishReason === 'MAX_TOKENS') {
+        const nextTokens = Math.min(currentMaxTokens * 2, 16384);
+        console.warn(`[Gemini] ⚠️ Respuesta truncada por límite de tokens (MAX_TOKENS) con ${currentMaxTokens}. Aumentando a ${nextTokens}...`);
+        if (typeof onLog === 'function') {
+          onLog(`⚠️ Historia truncada por límite de tokens. Aumentando límite de tokens a ${nextTokens} y reintentando...`);
+        }
+        currentMaxTokens = nextTokens;
+        throw new Error(`TOKEN_LIMIT_EXCEEDED: Generación truncada por límite de tokens (${currentMaxTokens})`);
+      }
+
+      if (finishReason === 'SAFETY') {
+        throw new Error(`Contenido bloqueado por filtros de seguridad de Gemini (${finishReason})`);
+      }
+
       let responseText = '';
       try {
         responseText = result.response.text();
       } catch (textErr) {
-        const candidate = result.response?.candidates?.[0];
-        const finishReason = candidate?.finishReason || result.response?.promptFeedback?.blockReason;
-        throw new Error(`Contenido bloqueado por filtros de seguridad de Gemini (${finishReason || textErr.message})`);
+        const blockReason = result.response?.promptFeedback?.blockReason;
+        throw new Error(`Contenido bloqueado por filtros de seguridad de Gemini (${finishReason || blockReason || textErr.message})`);
       }
 
-      console.log('Respuesta cruda de Gemini:', responseText);
+      console.log('Respuesta cruda de Gemini (extracto):', responseText.length > 250 ? responseText.substring(0, 250) + '...' : responseText);
       
-      // Sanitizar la respuesta en caso de que Gemini añada bloques de código markdown
-      if (responseText.includes('```')) {
-        responseText = responseText.replace(/```json|```/g, '').trim();
-      }
-      
-      const storyData = JSON.parse(responseText);
+      const storyData = repairAndParseJson(responseText);
       
       if (!storyData.title || (!storyData.content && !storyData.dialogues) || !storyData.gender) {
-        throw new Error('La respuesta de Gemini no coincide con el esquema requerido.');
+        throw new Error('La respuesta de Gemini no coincide con el esquema requerido o quedó incompleta.');
       }
       
       const fixSpelling = (str) => {
@@ -419,6 +499,24 @@ Reglas estrictas de redacción:
       // Si es el último intento, lanzamos el error
       if (attempt >= maxAttempts) {
         throw error;
+      }
+
+      const isTokenLimit = (error.message && (
+        error.message.includes('TOKEN_LIMIT_EXCEEDED') ||
+        error.message.includes('Unterminated string') ||
+        error.message.includes('Unexpected end of JSON') ||
+        error.message.includes('incompleta')
+      ));
+
+      if (isTokenLimit) {
+        const nextTokens = Math.min(Math.max(currentMaxTokens * 2, 8192), 16384);
+        console.log(`[Gemini] ⚠️ Generación incompleta o truncada (${currentMaxTokens} tokens). Ajustando a ${nextTokens} tokens y reintentando de inmediato...`);
+        if (typeof onLog === 'function') {
+          onLog(`⚠️ Generación incompleta. Ajustando automáticamente a ${nextTokens} tokens y reintentando...`);
+        }
+        currentMaxTokens = nextTokens;
+        await new Promise(resolve => setTimeout(resolve, 800));
+        continue;
       }
 
       // ROTACIÓN DE CLAVES API
