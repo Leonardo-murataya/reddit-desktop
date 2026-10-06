@@ -133,7 +133,7 @@ async function executeScriptStage({ profile, template, prompt, customStory, vide
 
   const primaryAttempts = profile.primaryAttempts !== undefined ? parseInt(profile.primaryAttempts) : 2;
   const fallbackAttempts = profile.fallbackAttempts !== undefined ? parseInt(profile.fallbackAttempts) : 3;
-  const fallbackModels = profile.fallbackModels || profile.fallbackModel || 'gemini-2.5-flash';
+  const fallbackModels = profile.fallbackModels || profile.fallbackModel || 'gemini-3.5-flash-lite, gemini-3.1-flash-lite';
   const maxOutputTokens = profile.maxOutputTokens !== undefined ? parseInt(profile.maxOutputTokens) : 8192;
 
   const story = await gemini.generateStory(

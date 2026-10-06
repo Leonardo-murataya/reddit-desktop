@@ -33,4 +33,6 @@ Thumbs.db
 # ECC y Agentes locales
 .agents/
 .claude/
+.skills/
+skills-lock.json
 

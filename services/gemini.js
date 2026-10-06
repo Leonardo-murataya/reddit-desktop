@@ -50,10 +50,11 @@ async function listAvailableModels(apiKey) {
 
   const defaultGuaranteed = [
     { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash' },
+    { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash Lite' },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
     { id: 'gemini-3.7-flash', name: 'Gemini 3.7 Flash' },
     { id: 'gemini-3.6-flash', name: 'Gemini 3.6 Flash' },
     { id: 'gemini-3.5-flash', name: 'Gemini 3.5 Flash' },
-    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash Lite' },
     { id: 'gemini-3-flash-preview', name: 'Gemini 3 Flash Preview' }
   ];
 
@@ -163,7 +164,7 @@ async function generateStory(
   systemPrompt,
   primaryAttempts = 2,
   fallbackAttempts = 3,
-  customFallbackModels = 'gemini-2.5-flash',
+  customFallbackModels = 'gemini-3.5-flash-lite, gemini-3.1-flash-lite',
   maxOutputTokens = 8192,
   onLog = null
 ) {
@@ -222,7 +223,7 @@ async function generateStory(
     .filter(m => !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
 
   // Lista de modelos garantizados oficiales con nombres normales
-  const guaranteedModels = ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview'];
+  const guaranteedModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview'];
   guaranteedModels.forEach(m => {
     if (!fallbackModels.includes(m)) fallbackModels.push(m);
   });
@@ -234,6 +235,8 @@ async function generateStory(
     activeModel = 'gemini-3-flash-preview';
   } else if (activeModel === 'gemini-3.1-flash') {
     activeModel = 'gemini-3.1-flash-lite';
+  } else if (activeModel === 'gemini-3.5-lite') {
+    activeModel = 'gemini-3.5-flash-lite';
   } else if (activeModel === 'gemini-3.7') {
     activeModel = 'gemini-3.7-flash';
   } else if (activeModel === 'gemini-3.8') {
@@ -249,16 +252,16 @@ async function generateStory(
       }
     }
     // 2. Probar en modelos garantizados
-    for (const model of ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview']) {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3-flash-preview']) {
       if (!isModelExhausted(model) && model !== currentModel) {
         return model;
       }
     }
     // 3. Devolver cualquiera que sea DIFERENTE al modelo actual
-    for (const model of ['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']) {
+    for (const model of ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']) {
       if (model !== currentModel) return model;
     }
-    return currentModel === 'gemini-3.8-flash' ? 'gemini-3.7-flash' : 'gemini-3.8-flash';
+    return currentModel === 'gemini-3.8-flash' ? 'gemini-3.5-flash-lite' : 'gemini-3.8-flash';
   }
 
   // Si el modelo principal está marcado temporalmente como agotado o sobrecargado,

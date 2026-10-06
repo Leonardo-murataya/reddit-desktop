@@ -50,10 +50,10 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     
     let loadedModels = prof.fallbackModels && Array.isArray(prof.fallbackModels) && prof.fallbackModels.length > 0
       ? [...prof.fallbackModels]
-      : (prof.model ? [prof.model] : ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
+      : (prof.model ? [prof.model] : ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
     
     loadedModels = loadedModels.filter(m => m && !m.includes('2.5') && m !== 'gemini-flash-lite-latest');
-    if (loadedModels.length === 0) loadedModels = ['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
+    if (loadedModels.length === 0) loadedModels = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash'];
     setFallbackModels([...loadedModels]);
   };
 
@@ -94,7 +94,7 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
     setPrimaryAttempts(2);
     setFallbackAttempts(3);
     setMaxOutputTokens(8192);
-    setFallbackModels(['gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
+    setFallbackModels(['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash']);
     setSuccess('');
   };
 
