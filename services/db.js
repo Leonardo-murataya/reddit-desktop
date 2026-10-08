@@ -3,15 +3,12 @@ const path = require('path');
 
 function getDbPath() {
   const localDb = path.join(__dirname, '..', 'db.json');
-  try {
-    const localDir = path.join(__dirname, '..');
-    const testFile = path.join(localDir, '.write_test');
-    fs.writeFileSync(testFile, '1');
-    fs.unlinkSync(testFile);
-    if (!__dirname.includes('_up_') && !__dirname.includes('Program Files')) {
-      return localDb;
-    }
-  } catch (e) {}
+  // En desarrollo, el directorio src-tauri existe en la raíz del proyecto
+  const isDev = fs.existsSync(path.join(__dirname, '..', 'src-tauri'));
+
+  if (isDev) {
+    return localDb;
+  }
 
   if (process.env.APPDATA) {
     const userDir = path.join(process.env.APPDATA, 'Reddit Video Generator');
@@ -166,15 +163,29 @@ function writeDb(data) {
         fs.renameSync(tempPath, DB_PATH);
         renamed = true;
       } catch (renameErr) {
-        if (attempts >= 4) throw renameErr;
-        // Pausa no consumidora de CPU delegada al planificador del sistema operativo
-        try {
-          Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30 * attempts);
-        } catch {
-          // Fallback pasivo
+        if (attempts >= 4) {
+          // Fallback directo si el renombrado fue bloqueado temporalmente por Windows
+          try {
+            fs.writeFileSync(DB_PATH, jsonStr, 'utf8');
+            renamed = true;
+          } catch (writeFallbackErr) {
+            throw renameErr;
+          }
+        } else {
+          // Pausa no consumidora de CPU delegada al planificador del sistema operativo
+          try {
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30 * attempts);
+          } catch {
+            // Fallback pasivo
+          }
         }
       }
     }
+
+    try {
+      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+    } catch {}
+
     return true;
   } catch (error) {
     console.error('Error writing atomically to local db.json:', error);

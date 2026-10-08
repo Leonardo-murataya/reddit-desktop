@@ -703,7 +703,11 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       { confirmText: 'Eliminar', cancelText: 'Cancelar', type: 'danger' }
     );
     if (ok) {
-      await onDelete(selectedId);
+      const res = await onDelete(selectedId);
+      if (res && res.error) {
+        showToast(`Error al eliminar plantilla: ${res.error}`, 'error');
+        return;
+      }
       const remaining = (templates || []).filter(t => t.id !== selectedId);
       if (remaining.length > 0) {
         setSelectedId(remaining[0].id);
@@ -1147,9 +1151,16 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       backgroundContrast: parseFloat(backgroundContrast)
     });
 
+    if (saved && saved.error) {
+      showToast(`Error al guardar plantilla: ${saved.error}`, 'error');
+      return;
+    }
+
     if (saved && saved.id) {
       setSelectedId(saved.id);
       showToast(`Plantilla "${name}" guardada exitosamente.`, 'success');
+    } else {
+      showToast('No se pudo confirmar el guardado de la plantilla en el servidor.', 'error');
     }
   };
 

@@ -11,26 +11,30 @@ const app = express();
 const PORT = process.env.PORT || 31826;
 
 // Middlewares
-const allowedOrigins = [
-  /^http:\/\/localhost(:\d+)?$/,
-  /^http:\/\/127\.0\.0\.1(:\d+)?$/,
-  /^https?:\/\/localhost(:\d+)?$/,
-  /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
-  'null' // Para file:// o entornos locales empaquetados
-];
+const isAllowedOrigin = (origin) => {
+  // Solicitudes locales directas (sin Origin header), curl, scripts locales o protocolos opacos
+  if (!origin || origin === 'null') return true;
+
+  // Protocolo interno de Tauri (tauri://localhost o esquemas tauri://*)
+  if (origin.startsWith('tauri://')) return true;
+
+  // Entornos de Tauri y WebView2 en Windows/Linux/macOS
+  if (/^https?:\/\/tauri\.localhost(:\d+)?$/.test(origin)) return true;
+
+  // Entornos de desarrollo y producción en bucle local (localhost o 127.0.0.1)
+  if (/^https?:\/\/localhost(:\d+)?$/.test(origin)) return true;
+  if (/^https?:\/\/127\.0\.0\.1(:\d+)?$/.test(origin)) return true;
+
+  return false;
+};
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Permitir solicitudes locales directas (sin Origin header) como herramientas locales, Electron o scripts
-    if (!origin) return callback(null, true);
-    const isAllowed = allowedOrigins.some(pattern => {
-      if (pattern instanceof RegExp) return pattern.test(origin);
-      return pattern === origin;
-    });
-    if (isAllowed) {
+    if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
-    return callback(new Error('Bloqueado por política CORS: Acceso no autorizado desde origen externo.'));
+    console.warn(`[CORS] Origen denegado: ${origin}`);
+    return callback(null, false);
   },
   credentials: true
 }));

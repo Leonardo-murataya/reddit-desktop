@@ -159,7 +159,7 @@ export default function SettingsPanel({
     setSuccess('');
     
     if (selectedProfileId === 'global') {
-      onSave({
+      const res = await onSave({
         backgroundFolder,
         exportFolder,
         renderEngine,
@@ -170,12 +170,17 @@ export default function SettingsPanel({
         reportFolder,
         autoCheckUpdate
       });
+      if (res && res.error) {
+        showToast(`Error al guardar ajustes: ${res.error}`, 'error');
+        return;
+      }
+      showToast('Ajustes y rutas globales guardados exitosamente.', 'success');
       setSuccess('Ajustes y rutas globales guardados exitosamente.');
       refreshBackground(backgroundFolder, 'global'); // Escanear biblioteca
     } else {
       const activeProfile = profiles.find(p => p.id === selectedProfileId);
       if (activeProfile) {
-        await onSaveProfile({
+        const res = await onSaveProfile({
           ...activeProfile,
           backgroundFolder,
           exportFolder,
@@ -186,6 +191,11 @@ export default function SettingsPanel({
           reportFolderSameAsVideo,
           reportFolder
         });
+        if (res && res.error) {
+          showToast(`Error al guardar rutas del canal: ${res.error}`, 'error');
+          return;
+        }
+        showToast(`Rutas del canal "${activeProfile.name}" guardadas exitosamente.`, 'success');
         setSuccess(`Rutas del canal "${activeProfile.name}" guardadas exitosamente.`);
         refreshBackground(backgroundFolder, activeProfile.id); // Escanear biblioteca del perfil
       }

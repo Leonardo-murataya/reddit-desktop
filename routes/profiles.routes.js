@@ -48,7 +48,10 @@ router.post('/', (req, res) => {
       }
     }
 
-    db.writeDb(currentDb);
+    const ok = db.writeDb(currentDb);
+    if (!ok) {
+      return res.status(500).json({ error: 'Error al persistir el perfil en la base de datos local.' });
+    }
     res.json({ success: true, profile: savedProfile, profiles: currentDb.profiles });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -60,7 +63,10 @@ router.delete('/:id', (req, res) => {
   try {
     const currentDb = db.readDb();
     currentDb.profiles = (currentDb.profiles || []).filter(p => p.id !== req.params.id);
-    db.writeDb(currentDb);
+    const ok = db.writeDb(currentDb);
+    if (!ok) {
+      return res.status(500).json({ error: 'Error al eliminar el perfil en la base de datos local.' });
+    }
     res.json({ success: true, profiles: currentDb.profiles });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -89,7 +95,10 @@ router.post('/import', (req, res) => {
       }
     });
 
-    db.writeDb(currentDb);
+    const ok = db.writeDb(currentDb);
+    if (!ok) {
+      return res.status(500).json({ error: 'Error al importar los perfiles en la base de datos local.' });
+    }
     res.json({ success: true, profiles: currentDb.profiles });
   } catch (error) {
     res.status(500).json({ error: error.message });

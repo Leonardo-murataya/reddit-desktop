@@ -256,13 +256,17 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newSettings)
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error del servidor (${res.status})`);
+      }
       const data = await res.json();
       const resolvedSettings = data.settings || data || newSettings;
       setSettings(resolvedSettings);
       refreshBackgroundVideos(resolvedSettings.backgroundFolder || newSettings.backgroundFolder);
       return { success: true, settings: resolvedSettings };
     } catch (err) {
-      console.error(err);
+      console.error('Error al guardar ajustes:', err);
       return { success: false, error: err.message };
     }
   };
@@ -274,6 +278,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(profile)
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error del servidor (${res.status})`);
+      }
       const data = await res.json();
       
       // Actualizar lista de perfiles con seguridad de array
@@ -293,7 +301,7 @@ export default function App() {
       }
       return savedProf || { success: true };
     } catch (err) {
-      console.error(err);
+      console.error('Error al guardar perfil:', err);
       return { success: false, error: err.message };
     }
   };
@@ -301,6 +309,10 @@ export default function App() {
   const handleDeleteProfile = async (id) => {
     try {
       const res = await fetch(`/api/profiles/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error del servidor (${res.status})`);
+      }
       const data = await res.json();
       if (Array.isArray(data.profiles)) {
         setProfiles(data.profiles);
@@ -311,7 +323,7 @@ export default function App() {
       }
       return { success: true };
     } catch (err) {
-      console.error(err);
+      console.error('Error al eliminar perfil:', err);
       return { success: false, error: err.message };
     }
   };
@@ -323,6 +335,10 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(template)
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error del servidor (${res.status})`);
+      }
       const data = await res.json();
       
       if (Array.isArray(data.templates)) {
@@ -336,7 +352,7 @@ export default function App() {
       }
       return data.template || template || { success: true };
     } catch (err) {
-      console.error(err);
+      console.error('Error al guardar plantilla:', err);
       return { success: false, error: err.message };
     }
   };
@@ -344,6 +360,10 @@ export default function App() {
   const handleDeleteTemplate = async (id) => {
     try {
       const res = await fetch(`/api/templates/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Error del servidor (${res.status})`);
+      }
       const data = await res.json();
       if (Array.isArray(data.templates)) {
         setTemplates(data.templates);
@@ -354,7 +374,7 @@ export default function App() {
       }
       return { success: true };
     } catch (err) {
-      console.error(err);
+      console.error('Error al eliminar plantilla:', err);
       return { success: false, error: err.message };
     }
   };

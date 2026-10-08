@@ -157,7 +157,11 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
       { confirmText: 'Eliminar', cancelText: 'Cancelar', type: 'danger' }
     );
     if (ok) {
-      await onDelete(selectedId);
+      const res = await onDelete(selectedId);
+      if (res && res.error) {
+        showToast(`Error al eliminar perfil: ${res.error}`, 'error');
+        return;
+      }
       const remaining = (profiles || []).filter(p => p.id !== selectedId);
       if (remaining.length > 0) {
         loadedProfileIdRef.current = remaining[0].id;
@@ -194,14 +198,20 @@ export default function ProfilesEditor({ profiles, onSave, onDelete }) {
       fallbackModel: finalModels[1] || finalModels[0]
     });
     
+    if (savedProfile && savedProfile.error) {
+      showToast(`Error al guardar perfil: ${savedProfile.error}`, 'error');
+      return;
+    }
+
     if (savedProfile && savedProfile.id) {
       setSelectedId(savedProfile.id);
       loadProfileData(savedProfile);
+      showToast(`Perfil de IA "${name}" guardado exitosamente.`, 'success');
+      setSuccess('Perfil de IA guardado exitosamente.');
+      setTimeout(() => setSuccess(''), 3000);
+    } else {
+      showToast('No se pudo confirmar el guardado del perfil en la base de datos.', 'error');
     }
-    
-    showToast(`Perfil de IA "${name}" guardado exitosamente.`, 'success');
-    setSuccess('Perfil de IA guardado exitosamente.');
-    setTimeout(() => setSuccess(''), 3000);
   };
 
   return (

@@ -32,7 +32,10 @@ router.post('/', (req, res) => {
       }
     }
 
-    db.writeDb(currentDb);
+    const ok = db.writeDb(currentDb);
+    if (!ok) {
+      return res.status(500).json({ error: 'Error al persistir la plantilla en la base de datos local.' });
+    }
     res.json({ success: true, template: savedTemplate, templates: currentDb.templates });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -44,7 +47,10 @@ router.delete('/:id', (req, res) => {
   try {
     const currentDb = db.readDb();
     currentDb.templates = (currentDb.templates || []).filter(t => t.id !== req.params.id);
-    db.writeDb(currentDb);
+    const ok = db.writeDb(currentDb);
+    if (!ok) {
+      return res.status(500).json({ error: 'Error al eliminar la plantilla en la base de datos local.' });
+    }
     res.json({ success: true, templates: currentDb.templates });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -82,7 +88,10 @@ router.post('/import', (req, res) => {
 
     if (!currentDb.templates) currentDb.templates = [];
     currentDb.templates.push(newTemplate);
-    db.writeDb(currentDb);
+    const ok = db.writeDb(currentDb);
+    if (!ok) {
+      return res.status(500).json({ error: 'Error al importar la plantilla en la base de datos local.' });
+    }
 
     res.json({
       success: true,
