@@ -212,6 +212,10 @@ async function generateSpeechAndTimestamps(text, voice, outputAudioPath, options
         } catch (attemptError) {
           console.warn(`[TTS] Intento ${attempts}/${maxAttempts} de síntesis falló:`, attemptError.message);
           
+          if (ttsInstance && ttsInstance.ws) {
+            try { ttsInstance.ws.close(); } catch (_) {}
+          }
+
           // Limpiar archivo parcial si existe
           if (fs.existsSync(partAudioPath)) {
             try { fs.unlinkSync(partAudioPath); } catch (e) {}
