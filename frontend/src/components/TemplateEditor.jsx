@@ -1406,14 +1406,6 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
               className="hidden"
             />
           </label>
-
-          <button
-            onClick={handleCreateNew}
-            className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white font-bold px-4 py-2.5 rounded-xl text-xs transition-all border border-border-dark cursor-pointer animate-pulse-ring"
-          >
-            <Plus className="w-4 h-4 text-brand-primary" />
-            <span>Crear Nueva Plantilla</span>
-          </button>
         </div>
       </div>
 
@@ -1450,125 +1442,19 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         </button>
       </div>
 
-      {/* ÁREA DE ESTUDIO DOMINANTE: LIENZO EN VIVO 1:1 & TIMELINE MULTITRACK */}
-      <LiveCanvasStage
-        previewOrientation={previewOrientation}
-        setPreviewOrientation={setPreviewOrientation}
-        cardTheme={cardTheme}
-        cardType={cardType}
-        cardUsername={cardUsername}
-        cardSubreddit={cardSubreddit}
-        cardAvatar={cardAvatar}
-        upvotes={upvotes}
-        comments={comments}
-        cardShowVerified={cardShowVerified}
-        cardShowAwards={cardShowAwards}
-        cardSelectedAwards={cardSelectedAwards}
-        cardWidth={cardWidth}
-        cardBorderRadius={cardBorderRadius}
-        cardPadding={cardPadding}
-        cardGap={cardGap}
-        cardScale={cardScale}
-        cardOffsetX={cardOffsetX}
-        cardOffsetY={cardOffsetY}
-        setCardOffsetX={setCardOffsetX}
-        setCardOffsetY={setCardOffsetY}
-        cardScale_16_9={cardScale_16_9}
-        cardOffsetX_16_9={cardOffsetX_16_9}
-        cardOffsetY_16_9={cardOffsetY_16_9}
-        setCardOffsetX_16_9={setCardOffsetX_16_9}
-        setCardOffsetY_16_9={setCardOffsetY_16_9}
-        cardEntryAnimation={cardEntryAnimation}
-        cardExitAnimation={cardExitAnimation}
-        cardEntryDuration={cardEntryDuration}
-        cardExitDuration={cardExitDuration}
-        handleResetPosition={handleResetPosition}
-        font={font}
-        fontSize={fontSize}
-        fontSize_16_9={fontSize_16_9}
-        subtitleColor={subtitleColor}
-        passiveColor={passiveColor}
-        animation={animation}
-        subtitleBorderStyle={subtitleBorderStyle}
-        subtitleLetterSpacing={subtitleLetterSpacing}
-        subtitleOffsetX={subtitleOffsetX}
-        subtitleOffsetY={subtitleOffsetY}
-        setSubtitleOffsetX={setSubtitleOffsetX}
-        setSubtitleOffsetY={setSubtitleOffsetY}
-        subtitleOffsetX_16_9={subtitleOffsetX_16_9}
-        subtitleOffsetY_16_9={subtitleOffsetY_16_9}
-        setSubtitleOffsetX_16_9={setSubtitleOffsetX_16_9}
-        setSubtitleOffsetY_16_9={setSubtitleOffsetY_16_9}
-        handleResetSubtitlePosition={handleResetSubtitlePosition}
-        testTitle={testTitle}
-        testSubtitleText={testSubtitleText}
-        setTestSubtitleText={setTestSubtitleText}
-        cardSfxEnabled={cardSfxEnabled}
-        cardSfxSound={cardSfxSound}
-        cardSfxVolume={cardSfxVolume}
-        backgroundBlur={backgroundBlur}
-        backgroundBlurMode={backgroundBlurMode}
-        vignetteStrength={vignetteStrength}
-        backgroundSaturation={backgroundSaturation}
-        backgroundContrast={backgroundContrast}
-        playSfxPreview={playSfxPreview}
-        watermarkEnabled={watermarkEnabled}
-        watermarkType={watermarkType}
-        watermarkText={watermarkText}
-        watermarkFont={watermarkFont}
-        watermarkSize={watermarkSize}
-        watermarkColor={watermarkColor}
-        watermarkOpacity={watermarkOpacity}
-        watermarkAlignment={watermarkAlignment}
-        watermarkOffsetX={watermarkOffsetX}
-        watermarkOffsetY={watermarkOffsetY}
-        watermarkAnimation={watermarkAnimation}
-        watermarkSpeed={watermarkSpeed}
-        watermarkImageFile={watermarkImageFile}
-        watermarkImageScale={watermarkImageScale}
-        watermarkImageOpacity={watermarkImageOpacity}
-        watermarkImageAlignment={watermarkImageAlignment}
-        watermarkImageOffsetX={watermarkImageOffsetX}
-        watermarkImageOffsetY={watermarkImageOffsetY}
-        musicEnabled={musicEnabled}
-        musicVolume={musicVolume}
-        previewState={previewState}
-        isPlayingTimeline={isPlayingTimeline}
-        timelineProgress={timelineProgress}
-        handleStartTimelineSimulation={handleStartTimelineSimulation}
-        handleResetTimelineSimulation={handleResetTimelineSimulation}
-        handleScrubTimeline={handleScrubTimeline}
-        stylePacks={STYLE_PACKS}
-        applyStylePack={applyStylePack}
-      />
-
       {/* PANELES DE INSPECCIÓN Y CONFIGURACIÓN MODULAR (FULL WIDTH) */}
       <form onSubmit={handleSaveSubmit} className="glass-panel rounded-2xl p-6 space-y-6 w-full shadow-2xl">
             
-            {/* Selección de plantilla */}
-            <div className="flex items-center gap-4 border-b border-border-dark pb-4">
-              <div className="flex-grow space-y-1">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase">Selecciona Plantilla</label>
-                <select
-                  value={selectedId}
-                  onChange={(e) => setSelectedId(e.target.value)}
-                  className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-brand-primary font-bold"
-                >
-                  {selectedId === 'new' && (
-                    <option value="new">-- Nueva Plantilla (Sin Guardar) --</option>
-                  )}
-                  {templates.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
+            {/* Nombre de la Plantilla */}
+            <div className="border-b border-border-dark pb-4">
               <div className="space-y-1">
-                <label className="block text-[10px] font-bold text-gray-400 uppercase">Nombre</label>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wide">Nombre de la Plantilla</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="bg-black/40 border border-border-dark rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-brand-primary font-bold"
+                  placeholder="Nombre de la plantilla"
+                  className="w-full bg-black/40 border border-border-dark rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-brand-primary font-bold"
                 />
               </div>
             </div>
@@ -2052,6 +1938,98 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
 
                   </div>
                 </div>
+
+                {/* ÁREA DE ESTUDIO DOMINANTE: LIENZO EN VIVO 1:1 & TIMELINE MULTITRACK */}
+                <LiveCanvasStage
+                  previewOrientation={previewOrientation}
+                  setPreviewOrientation={setPreviewOrientation}
+                  cardTheme={cardTheme}
+                  cardType={cardType}
+                  cardUsername={cardUsername}
+                  cardSubreddit={cardSubreddit}
+                  cardAvatar={cardAvatar}
+                  upvotes={upvotes}
+                  comments={comments}
+                  cardShowVerified={cardShowVerified}
+                  cardShowAwards={cardShowAwards}
+                  cardSelectedAwards={cardSelectedAwards}
+                  cardWidth={cardWidth}
+                  cardBorderRadius={cardBorderRadius}
+                  cardPadding={cardPadding}
+                  cardGap={cardGap}
+                  cardScale={cardScale}
+                  cardOffsetX={cardOffsetX}
+                  cardOffsetY={cardOffsetY}
+                  setCardOffsetX={setCardOffsetX}
+                  setCardOffsetY={setCardOffsetY}
+                  cardScale_16_9={cardScale_16_9}
+                  cardOffsetX_16_9={cardOffsetX_16_9}
+                  cardOffsetY_16_9={cardOffsetY_16_9}
+                  setCardOffsetX_16_9={setCardOffsetX_16_9}
+                  setCardOffsetY_16_9={setCardOffsetY_16_9}
+                  cardEntryAnimation={cardEntryAnimation}
+                  cardExitAnimation={cardExitAnimation}
+                  cardEntryDuration={cardEntryDuration}
+                  cardExitDuration={cardExitDuration}
+                  handleResetPosition={handleResetPosition}
+                  font={font}
+                  fontSize={fontSize}
+                  fontSize_16_9={fontSize_16_9}
+                  subtitleColor={subtitleColor}
+                  passiveColor={passiveColor}
+                  animation={animation}
+                  subtitleBorderStyle={subtitleBorderStyle}
+                  subtitleLetterSpacing={subtitleLetterSpacing}
+                  subtitleOffsetX={subtitleOffsetX}
+                  subtitleOffsetY={subtitleOffsetY}
+                  setSubtitleOffsetX={setSubtitleOffsetX}
+                  setSubtitleOffsetY={setSubtitleOffsetY}
+                  subtitleOffsetX_16_9={subtitleOffsetX_16_9}
+                  subtitleOffsetY_16_9={subtitleOffsetY_16_9}
+                  setSubtitleOffsetX_16_9={setSubtitleOffsetX_16_9}
+                  setSubtitleOffsetY_16_9={setSubtitleOffsetY_16_9}
+                  handleResetSubtitlePosition={handleResetSubtitlePosition}
+                  testTitle={testTitle}
+                  testSubtitleText={testSubtitleText}
+                  setTestSubtitleText={setTestSubtitleText}
+                  cardSfxEnabled={cardSfxEnabled}
+                  cardSfxSound={cardSfxSound}
+                  cardSfxVolume={cardSfxVolume}
+                  backgroundBlur={backgroundBlur}
+                  backgroundBlurMode={backgroundBlurMode}
+                  vignetteStrength={vignetteStrength}
+                  backgroundSaturation={backgroundSaturation}
+                  backgroundContrast={backgroundContrast}
+                  playSfxPreview={playSfxPreview}
+                  watermarkEnabled={watermarkEnabled}
+                  watermarkType={watermarkType}
+                  watermarkText={watermarkText}
+                  watermarkFont={watermarkFont}
+                  watermarkSize={watermarkSize}
+                  watermarkColor={watermarkColor}
+                  watermarkOpacity={watermarkOpacity}
+                  watermarkAlignment={watermarkAlignment}
+                  watermarkOffsetX={watermarkOffsetX}
+                  watermarkOffsetY={watermarkOffsetY}
+                  watermarkAnimation={watermarkAnimation}
+                  watermarkSpeed={watermarkSpeed}
+                  watermarkImageFile={watermarkImageFile}
+                  watermarkImageScale={watermarkImageScale}
+                  watermarkImageOpacity={watermarkImageOpacity}
+                  watermarkImageAlignment={watermarkImageAlignment}
+                  watermarkImageOffsetX={watermarkImageOffsetX}
+                  watermarkImageOffsetY={watermarkImageOffsetY}
+                  musicEnabled={musicEnabled}
+                  musicVolume={musicVolume}
+                  previewState={previewState}
+                  isPlayingTimeline={isPlayingTimeline}
+                  timelineProgress={timelineProgress}
+                  handleStartTimelineSimulation={handleStartTimelineSimulation}
+                  handleResetTimelineSimulation={handleResetTimelineSimulation}
+                  handleScrubTimeline={handleScrubTimeline}
+                  stylePacks={STYLE_PACKS}
+                  applyStylePack={applyStylePack}
+                />
               </div>
             )}
 
