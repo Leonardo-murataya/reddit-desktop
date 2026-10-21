@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 
 export default function LiveCanvasStage({
+  initialViewMode = 'both',
   // Orientación y Ratios
   previewOrientation = '9:16',
   setPreviewOrientation,
@@ -128,7 +129,14 @@ export default function LiveCanvasStage({
   const canvasRef = useRef(null);
   const [canvasWidth, setCanvasWidth] = useState(560);
   const [showSafeZones, setShowSafeZones] = useState(true);
-  const [stageViewMode, setStageViewMode] = useState('both'); // 'both' | 'card' | 'subtitles'
+  const [stageViewMode, setStageViewMode] = useState(initialViewMode); // 'both' | 'card' | 'subtitles'
+
+  useEffect(() => {
+    if (initialViewMode) {
+      setStageViewMode(initialViewMode);
+    }
+  }, [initialViewMode]);
+
   const [activeDragTarget, setActiveDragTarget] = useState(null); // 'card' | 'subtitles' | null
   const [isHoveredTarget, setIsHoveredTarget] = useState(null);
   const [dragStartPos, setDragStartPos] = useState({ x: 0, y: 0 });
