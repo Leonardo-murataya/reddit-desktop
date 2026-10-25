@@ -413,6 +413,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     const phrases = [];
     let currentPhrase = [];
 
+    const measurer = textMetrics.createTextMeasurer(font, activeFontSize, subtitleLetterSpacing);
+    const maxLineWidth = resX - 120; // márgenes izquierdo/derecho del estilo (60 + 60)
+    const phraseText = (words) => words.map((w) => (w.word ? w.word.replace(/[\{\}\\]/g, '').toUpperCase() : '')).join(' ');
+
     // Segmentación inteligente basada en puntuación (.!?) y silencios (>0.4s) para evitar combinar oraciones distintas
     for (let i = 0; i < timestamps.length; i++) {
       const wt = timestamps[i];
@@ -420,17 +424,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
       const hasEndingPunctuation = /[.!?]/.test(wt.word);
       const isTooLong = currentPhrase.length >= maxWordsPerPhrase;
-      
+
       // Cerrar frase si la siguiente palabra tiene una pausa de silencio significativa (>0.4s)
       let hasSignificantPause = false;
+      // Cerrar frase si la siguiente palabra ya no cabe en un solo renglón (con letra grande)
+      let nextWouldWrap = false;
       if (i < timestamps.length - 1) {
         const nextWt = timestamps[i + 1];
         if (nextWt.start - wt.end > 0.4) {
           hasSignificantPause = true;
         }
+        if (measurer && measurer.widthOf(phraseText([...currentPhrase, nextWt])) > maxLineWidth) {
+          nextWouldWrap = true;
+        }
       }
 
-      if (hasEndingPunctuation || isTooLong || hasSignificantPause) {
+      if (hasEndingPunctuation || isTooLong || hasSignificantPause || nextWouldWrap) {
         phrases.push(currentPhrase);
         currentPhrase = [];
       }
@@ -438,9 +447,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if (currentPhrase.length > 0) {
       phrases.push(currentPhrase);
     }
-
-    const measurer = textMetrics.createTextMeasurer(font, activeFontSize, subtitleLetterSpacing);
-    const maxLineWidth = resX - 120; // márgenes izquierdo/derecho del estilo (60 + 60)
     // Proporciones tomadas de un export real de CapCut (caja #830AE8 sobre texto en mayúsculas)
     const boxPadX = activeFontSize * 0.11;
     const boxPadY = activeFontSize * 0.19;
