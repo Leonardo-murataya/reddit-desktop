@@ -36,3 +36,6 @@ Thumbs.db
 .skills/
 skills-lock.json
 
+
+# Material de análisis (videos y CSV de Facebook)
+analisis/

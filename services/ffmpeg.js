@@ -389,11 +389,11 @@ async function compileVideo(params, onProgress = () => {}) {
         '-tune', 'hq',
         '-profile:v', 'high',
         '-rc', 'vbr',
-        '-cq', '18', // Máxima nitidez en 1080p
+        '-cq', '21', // Nitidez alta sin inflar el archivo (antes cq 18 producía ~26 Mbps reales)
         '-spatial-aq', '1',
-        '-b:v', '14M',
-        '-maxrate:v', '28M',
-        '-bufsize:v', '28M',
+        '-b:v', '10M',
+        '-maxrate:v', '14M',
+        '-bufsize:v', '20M',
         '-pix_fmt', 'yuv420p'
       );
     } else if (activeCodec === 'hevc_amf') {
@@ -412,8 +412,8 @@ async function compileVideo(params, onProgress = () => {}) {
         '-c:v', 'h264_amf',
         '-quality', 'balanced',
         '-rc', 'vbr_peak',
-        '-b:v', '14M',
-        '-maxrate:v', '28M',
+        '-b:v', '10M',
+        '-maxrate:v', '14M',
         '-pix_fmt', 'yuv420p'
       );
     } else if (activeCodec === 'hevc_qsv') {
@@ -450,8 +450,9 @@ async function compileVideo(params, onProgress = () => {}) {
       );
     }
 
-    // Codificación de audio estándar ultra-rápida
-    args.push('-c:a', 'aac', '-b:a', '192k');
+    // Codificación de audio: estéreo a 44.1 kHz como un export de editor convencional
+    // (Edge-TTS entrega mono a 24 kHz, una firma típica de contenido automatizado)
+    args.push('-c:a', 'aac', '-b:a', '192k', '-ar', '44100', '-ac', '2');
 
     // Duración máxima de salida igual a la de los audios para evitar desbordamientos
     args.push('-t', totalDuration.toString());
