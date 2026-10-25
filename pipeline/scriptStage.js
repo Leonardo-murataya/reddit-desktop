@@ -135,6 +135,7 @@ async function executeScriptStage({ profile, template, prompt, customStory, vide
   const fallbackAttempts = profile.fallbackAttempts !== undefined ? parseInt(profile.fallbackAttempts) : 3;
   const fallbackModels = profile.fallbackModels || profile.fallbackModel || 'gemini-3.5-flash-lite, gemini-3.1-flash-lite';
   const maxOutputTokens = profile.maxOutputTokens !== undefined ? parseInt(profile.maxOutputTokens) : 8192;
+  const titleMaxChars = parseInt(profile.titleMaxChars) > 0 ? parseInt(profile.titleMaxChars) : 0;
 
   const story = await gemini.generateStory(
     profile.apiKey,
@@ -160,7 +161,8 @@ async function executeScriptStage({ profile, template, prompt, customStory, vide
           log: `${videoNumStr} ${msg}`
         });
       }
-    }
+    },
+    titleMaxChars
   );
 
   if (job?.status === 'cancelling' || job?.status === 'cancelled') {

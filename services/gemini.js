@@ -1,18 +1,16 @@
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 
-// Límite del título: también se usa como descripción en Facebook (título + hashtags),
-// y Facebook recomienda descripciones de 200 a 400 caracteres.
-const TITLE_MAX_CHARS = 200;
-const TITLE_IDEAL_MIN_CHARS = 120;
-const TITLE_IDEAL_MAX_CHARS = 180;
+// Descripción del título cuando el perfil no fija un límite de caracteres (comportamiento original)
+const DEFAULT_TITLE_DESCRIPTION = 'Un título corto, extremadamente llamativo e intrigante de la historia de Reddit (máximo 15 palabras).';
 
 /**
- * Recorta un título que excede el máximo sin cortar palabras a la mitad:
+ * Recorta un título que excede el máximo del perfil sin cortar palabras a la mitad:
  * primero en el último fin de frase o coma antes del límite y, si no hay, en el último espacio con "…".
+ * Con maxChars <= 0 (perfil sin límite) devuelve el título tal cual.
  */
-function limitTitleLength(title, maxChars = TITLE_MAX_CHARS) {
+function limitTitleLength(title, maxChars) {
   const clean = String(title || '').replace(/\s+/g, ' ').trim();
-  if (clean.length <= maxChars) return clean;
+  if (!maxChars || maxChars <= 0 || clean.length <= maxChars) return clean;
 
   const slice = clean.slice(0, maxChars);
   const minUseful = Math.floor(maxChars * 0.5);
@@ -193,8 +191,21 @@ async function generateStory(
   fallbackAttempts = 3,
   customFallbackModels = 'gemini-3.5-flash-lite, gemini-3.1-flash-lite',
   maxOutputTokens = 8192,
-  onLog = null
+  onLog = null,
+  titleMaxChars = 0
 ) {
+  // Límite de caracteres del título definido en el perfil (0 = sin límite). El título se usa también
+  // como descripción en Facebook, que recomienda descripciones de 200 a 400 caracteres.
+  const titleLimit = parseInt(titleMaxChars) > 0 ? parseInt(titleMaxChars) : 0;
+  const titleIdealMin = Math.round(titleLimit * 0.6);
+  const titleIdealMax = Math.round(titleLimit * 0.9);
+  const titleDescription = titleLimit
+    ? `Un título extremadamente llamativo e intrigante de la historia de Reddit, de entre ${titleIdealMin} y ${titleIdealMax} caracteres y NUNCA más de ${titleLimit} caracteres contando espacios.`
+    : DEFAULT_TITLE_DESCRIPTION;
+  const titleRule = titleLimit
+    ? `\n- LÍMITE DEL TÍTULO: el título debe tener entre ${titleIdealMin} y ${titleIdealMax} caracteres y jamás superar ${titleLimit} caracteres (contando espacios). Si tu idea es más larga, condénsala sin perder el gancho.`
+    : '';
+
   if (!apiKey) {
     throw new Error('API Key de Gemini no proporcionada. Por favor, configúrala en Ajustes.');
   }
@@ -308,7 +319,7 @@ async function generateStory(
     properties: {
       title: {
         type: 'STRING',
-        description: `Un título extremadamente llamativo e intrigante de la historia de Reddit, de entre ${TITLE_IDEAL_MIN_CHARS} y ${TITLE_IDEAL_MAX_CHARS} caracteres y NUNCA más de ${TITLE_MAX_CHARS} caracteres contando espacios (se usa también como descripción de la publicación en Facebook).`
+        description: titleDescription
       },
       dialogues: {
         type: 'ARRAY',
@@ -345,7 +356,7 @@ async function generateStory(
     properties: {
       title: {
         type: 'STRING',
-        description: `Un título extremadamente llamativo e intrigante de la historia de Reddit, de entre ${TITLE_IDEAL_MIN_CHARS} y ${TITLE_IDEAL_MAX_CHARS} caracteres y NUNCA más de ${TITLE_MAX_CHARS} caracteres contando espacios (se usa también como descripción de la publicación en Facebook).`
+        description: titleDescription
       },
       content: {
         type: 'STRING',
@@ -367,8 +378,7 @@ Genera una historia única basada en el siguiente tema o prompt:
 Reglas estrictas de redacción:
 - Debe parecer una publicación real de Reddit en foros como r/nosleep, r/confessions, o r/AskReddit.
 - Empieza directamente con el relato, sin introducciones decorativas como "Aquí tienes tu historia".
-- Evita caracteres especiales extraños o emojis, ya que esto será leído por un sintetizador de voz (TTS).
-- LÍMITE DEL TÍTULO: el título debe tener entre ${TITLE_IDEAL_MIN_CHARS} y ${TITLE_IDEAL_MAX_CHARS} caracteres y jamás superar ${TITLE_MAX_CHARS} caracteres (contando espacios). Si tu idea es más larga, condénsala sin perder el gancho.
+- Evita caracteres especiales extraños o emojis, ya que esto será leído por un sintetizador de voz (TTS).${titleRule}
 - REQUISITO CRÍTICO DE EXTENSIÓN: Desarrolla el relato con máxima minuciosidad y progresión dramática, detallando los acontecimientos día a día, las confrontaciones y los giros para cumplir rigurosamente con la meta de palabras indicada en tus instrucciones del sistema. No resumas ni apresures el desenlace; desglosa los hechos con la amplitud necesaria para alcanzar la extensión completa requerida.
 `;
 
@@ -467,7 +477,7 @@ Reglas estrictas de redacción:
           .replace(/\bANOS\b/g, 'AÑOS');
       };
 
-      if (storyData.title) storyData.title = limitTitleLength(fixSpelling(storyData.title));
+      if (storyData.title) storyData.title = limitTitleLength(fixSpelling(storyData.title), titleLimit);
       if (storyData.content) storyData.content = fixSpelling(storyData.content);
       if (Array.isArray(storyData.dialogues)) {
         storyData.dialogues = storyData.dialogues.map(d => ({
