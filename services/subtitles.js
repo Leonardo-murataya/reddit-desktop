@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const textMetrics = require('./textMetrics');
 
 // Convierte un color Hex de CSS (#RRGGBB) a formato ASS Hex (&H00BBGGRR&)
 function colorToAss(hex) {
@@ -28,6 +29,142 @@ function formatTimeASS(seconds) {
   const msStr = ms.toString().padStart(2, '0');
 
   return `${hStr}:${mStr}:${sStr}.${msStr}`;
+}
+
+const TEXT_LAYER_BASE = 900000; // las capas de texto siempre van encima de los subtítulos
+const MAX_TEXT_OCCURRENCES = 30;
+const WIGGLE_STEP_MS = 160; // cada cuánto cambia la inclinación de cada letra
+const WIGGLE_CHUNK_MS = 6000; // las capas largas se parten en bloques para no generar líneas gigantes
+
+function clampNum(value, min, max, fallback) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return fallback;
+  return Math.min(max, Math.max(min, num));
+}
+
+// Generador pseudoaleatorio determinista: el mismo texto siempre se bambolea igual
+function seededRandom(seed) {
+  let s = seed % 2147483647;
+  if (s <= 0) s += 2147483646;
+  return () => {
+    s = (s * 16807) % 2147483647;
+    return (s - 1) / 2147483646;
+  };
+}
+
+/**
+ * Genera las líneas Dialogue de las capas de texto (overlays de tipo 'text').
+ * Animaciones: none, fade, pop, slide-down, pulse y wiggle (bamboleo letra por letra estilo CapCut).
+ */
+function buildTextLayerEvents(overlays, { resX, resY, videoEnd }) {
+  if (!Array.isArray(overlays)) return '';
+  let events = '';
+
+  overlays
+    .filter(ov => ov && ov.type === 'text' && ov.enabled !== false && String(ov.text || '').trim())
+    .forEach((ov, layerIdx) => {
+      const font = ov.font || 'Bangers';
+      const fontSize = Math.round(clampNum(ov.fontSize, 10, 400, 90));
+      const spacing = clampNum(ov.letterSpacing, -10, 40, 0);
+      const outline = clampNum(ov.outlineWidth, 0, 30, 6);
+      const x = Math.round(resX * clampNum(ov.posX, -0.5, 1.5, 0.5));
+      const y = Math.round(resY * clampNum(ov.posY, -0.5, 1.5, 0.12));
+      const lines = String(ov.text).replace(/[{}\\]/g, '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const baseTags = `\\fn${font}\\fs${fontSize}\\fsp${spacing}\\b1\\c${colorToAss(ov.color || '#FFD400')}\\3c${colorToAss(ov.outlineColor || '#000000')}\\bord${outline}\\shad0`;
+      const animation = ov.animation || 'wiggle';
+
+      const startTime = clampNum(ov.startTime, 0, 36000, 0);
+      const repeatEvery = clampNum(ov.repeatEvery, 0, 36000, 0);
+      const requestedDuration = clampNum(ov.duration, 0, 36000, 0);
+      const occurrences = [];
+      for (let t = startTime; t < videoEnd && occurrences.length < MAX_TEXT_OCCURRENCES; t += repeatEvery) {
+        const end = requestedDuration > 0 ? Math.min(t + requestedDuration, videoEnd) : videoEnd;
+        occurrences.push([t, end]);
+        if (repeatEvery <= 0) break;
+      }
+
+      const layer = TEXT_LAYER_BASE + layerIdx * 10;
+      const measurer = textMetrics.createTextMeasurer(font, fontSize, spacing);
+      // Interlineado compacto como en CapCut (basado en la altura de mayúsculas); sin medidor, el de libass
+      let lineHeight = fontSize * 0.95;
+      if (measurer) {
+        const { capTop, baseline } = measurer.lineBox(0);
+        lineHeight = (baseline - capTop) * 1.35;
+      }
+      const lineCenterY = (li) => Math.round(y + (li - (lines.length - 1) / 2) * lineHeight);
+
+      occurrences.forEach(([t0, t1], occIdx) => {
+        const durMs = Math.round((t1 - t0) * 1000);
+        const fullText = lines.join('\\N');
+
+        if (animation === 'wiggle' && measurer) {
+          // Cada letra es su propia línea con su propio eje de giro, así se inclinan de forma independiente
+          const rand = seededRandom(fullText.length * 7919 + layerIdx * 104729 + occIdx * 31);
+          lines.forEach((line, li) => {
+            const chars = [...line];
+            const lineWidth = measurer.widthOf(line);
+            const left = x - lineWidth / 2;
+            const cy = lineCenterY(li);
+            chars.forEach((ch, ci) => {
+              if (!ch.trim()) return;
+              const cx = Math.round(left + measurer.widthOf(chars.slice(0, ci).join('')) + (measurer.widthOf(ch) - spacing) / 2);
+              const angles = [];
+              for (let s = 0; s <= Math.ceil(durMs / WIGGLE_STEP_MS); s++) angles.push(Math.round((rand() * 2 - 1) * 7));
+
+              for (let chunkStart = 0; chunkStart < durMs; chunkStart += WIGGLE_CHUNK_MS) {
+                const chunkEnd = Math.min(durMs, chunkStart + WIGGLE_CHUNK_MS);
+                const firstStep = Math.floor(chunkStart / WIGGLE_STEP_MS);
+                let tags = `\\an5\\pos(${cx},${cy})\\org(${cx},${cy})${baseTags}\\frz${angles[firstStep]}`;
+                for (let s = firstStep + 1; s * WIGGLE_STEP_MS < chunkEnd; s++) {
+                  const relStart = (s - 1) * WIGGLE_STEP_MS - chunkStart;
+                  tags += `\\t(${Math.max(0, relStart)},${relStart + WIGGLE_STEP_MS},\\frz${angles[s]})`;
+                }
+                const fadeIn = chunkStart === 0 ? 150 : 0;
+                const fadeOut = chunkEnd === durMs ? 300 : 0;
+                if (fadeIn || fadeOut) tags += `\\fad(${fadeIn},${fadeOut})`;
+                events += `Dialogue: ${layer},${formatTimeASS(t0 + chunkStart / 1000)},${formatTimeASS(t0 + chunkEnd / 1000)},CapaTexto,,0,0,0,,{${tags}}${ch}\n`;
+              }
+            });
+          });
+          return;
+        }
+
+        // Con medidor, cada renglón va en su propia línea para usar el interlineado compacto
+        const rows = measurer && lines.length > 1
+          ? lines.map((line, li) => ({ text: line, cy: lineCenterY(li) }))
+          : [{ text: fullText, cy: y }];
+
+        let animTags = '';
+        if (animation === 'fade') {
+          animTags = '\\fad(300,300)';
+        } else if (animation === 'pop') {
+          animTags = '\\fscx30\\fscy30\\t(0,160,\\fscx112\\fscy112)\\t(160,260,\\fscx100\\fscy100)\\fad(0,250)';
+        } else if (animation === 'slide-down') {
+          animTags = '\\fad(150,250)';
+        } else if (animation === 'pulse') {
+          for (let s = 0; s * 500 < Math.min(durMs, 60000); s++) {
+            const scaleTo = s % 2 === 0 ? 108 : 100;
+            animTags += `\\t(${s * 500},${(s + 1) * 500},\\fscx${scaleTo}\\fscy${scaleTo})`;
+          }
+          animTags += '\\fad(150,250)';
+        } else if (animation === 'wiggle') {
+          // Respaldo si la fuente no se pudo medir: bamboleo de la capa completa
+          for (let s = 0; s * 250 < Math.min(durMs, 60000); s++) {
+            animTags += `\\t(${s * 250},${(s + 1) * 250},\\frz${s % 2 === 0 ? 3 : -3})`;
+          }
+          animTags += '\\fad(150,300)';
+        }
+        rows.forEach(({ text, cy }) => {
+          const posTags = animation === 'slide-down'
+            ? `\\move(${x},${cy - Math.round(fontSize * 1.5)},${x},${cy},0,300)`
+            : `\\pos(${x},${cy})`;
+          // Todas las filas giran/escalan alrededor del centro de la capa completa
+          events += `Dialogue: ${layer},${formatTimeASS(t0)},${formatTimeASS(t1)},CapaTexto,,0,0,0,,{\\an5${posTags}\\org(${x},${y})${baseTags}${animTags}}${text}\n`;
+        });
+      });
+    });
+
+  return events;
 }
 
 /**
@@ -156,13 +293,18 @@ Style: Default,${font},${activeFontSize},${assPassiveColor},&H000000FF&,${assOut
 Style: Karaoke,${font},${activeFontSize},${assActiveColor},${assPassiveColor},${assOutlineColor},${assBackColour},-1,0,0,0,100,100,${subtitleLetterSpacing},0,${assBorderStyle},${assOutlineSize},${assShadowSize},5,60,60,650,1
 Style: TitleCard,${font},28,&H00FFFFFF&,&H000000FF&,${assOutlineColor},&H00000000&,-1,0,0,0,100,100,0,0,1,3.5,0.5,5,60,60,650,1
 Style: Watermark,${watermarkFont},${watermarkSize},${wmAssColor},&H000000FF&,&H00000000&,&H00000000&,-1,0,0,0,100,100,0,0,1,1.5,0,${watermarkAlignment},10,10,10,1
+Style: CapaTexto,Arial,60,&H00FFFFFF&,&H000000FF&,&H00000000&,&H00000000&,-1,0,0,0,100,100,0,0,1,4,0,5,0,0,0,1
 `;
 
-  // Estilo dedicado de Borde Emergente II (Caja de color morado plano estilo Capcut sin contorno blanco)
+  // Estilos dedicados de Borde Emergente II (caja morada redondeada estilo CapCut)
+  // - CajaCapCut: rectángulo vectorial (\p1) medido para quedar exactamente detrás de la palabra activa.
+  // - BordeEmergente (respaldo si la fuente no se puede medir): contorno muy grueso con relleno invisible;
+  //   libass une los trazos con juntas redondas y queda una caja redondeada que sigue la forma del texto.
   if (animation === 'borde-emergente-2') {
-    const boxBgColor = '&H008E136C&'; // Morado Capcut en BGR (#6C138E)
-    // Para BorderStyle 3 (caja sólida), el PrimaryColour es el texto y el OutlineColour es el fondo de la caja
-    assContent += `Style: BordeEmergente,${font},${activeFontSize},&H00FFFFFF&,&H000000FF&,${boxBgColor},&H00000000&,-1,0,0,0,100,100,${subtitleLetterSpacing},0,3,4.0,0,5,60,60,650,1\n`;
+    const boxBgColor = '&H00E80A83&'; // Morado CapCut en BGR (#830AE8)
+    const boxPadding = Math.max(8, Math.round(activeFontSize * 0.3));
+    assContent += `Style: BordeEmergente,${font},${activeFontSize},&HFF000000&,&HFF0000FF&,${boxBgColor},&HFF000000&,-1,0,0,0,100,100,${subtitleLetterSpacing},0,1,${boxPadding},0,5,60,60,650,1\n`;
+    assContent += `Style: CajaCapCut,Arial,20,${boxBgColor},&H000000FF&,&H00000000&,&H00000000&,0,0,0,0,100,100,0,0,1,0,0,5,0,0,0,1\n`;
   }
 
   assContent += `
@@ -297,39 +439,63 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       phrases.push(currentPhrase);
     }
 
+    const measurer = textMetrics.createTextMeasurer(font, activeFontSize, subtitleLetterSpacing);
+    const maxLineWidth = resX - 120; // márgenes izquierdo/derecho del estilo (60 + 60)
+    // Proporciones tomadas de un export real de CapCut (caja #830AE8 sobre texto en mayúsculas)
+    const boxPadX = activeFontSize * 0.11;
+    const boxPadY = activeFontSize * 0.19;
+    const boxRadius = activeFontSize * 0.09;
+    if (!measurer) {
+      console.warn(`[Subtítulos] No se encontró el archivo de la fuente "${font}"; se usa la caja de respaldo.`);
+    }
+
     let dialogueIdx = 0;
     phrases.forEach((phrase) => {
+      const cleanWords = phrase.map((wt) => (wt.word ? wt.word.replace(/[\{\}\\]/g, '').toUpperCase() : ''));
+      const lineText = cleanWords.join(' ');
+      const lineWidth = measurer ? measurer.widthOf(lineText) : 0;
+      // Si la frase no cabe en una línea libass la parte en dos y la medición ya no aplica
+      const canDrawBox = measurer && lineWidth <= maxLineWidth;
+
       phrase.forEach((activeWt, wIdx) => {
         const wordStart = formatTimeASS(activeWt.start + startOffset);
         // Determinar fin de diálogo: si no es la última palabra del bloque, termina exactamente al inicio de la siguiente
         const endVal = (wIdx < phrase.length - 1) ? phrase[wIdx + 1].start : activeWt.end;
         const wordEnd = formatTimeASS(endVal + startOffset);
 
-        // Capa 1: Capa Pasiva (Default) - Todas las letras en blanco/pasivo, la palabra activa es transparente
-        const passiveTextParts = phrase.map((wt) => {
-          if (wt === activeWt) {
-            return `{\\alpha&HFF&}${wt.word.toUpperCase()}{\\alpha&H00&}`;
-          } else {
-            return wt.word.toUpperCase();
-          }
-        });
-        const passiveDialogueText = `{\\pos(${X},${Y})}${passiveTextParts.join(' ')}`;
+        // Capa inferior: la caja morada detrás de la palabra activa, que "emerge" con un pop rápido
+        let boxDialogue;
+        if (canDrawBox) {
+          const textBefore = cleanWords.slice(0, wIdx).join(' ') + (wIdx > 0 ? ' ' : '');
+          const wordLeft = X - lineWidth / 2 + measurer.widthOf(textBefore);
+          const wordWidth = measurer.widthOf(cleanWords[wIdx]) - (parseFloat(subtitleLetterSpacing) || 0);
+          const { capTop, baseline } = measurer.lineBox(Y);
+          const boxW = wordWidth + boxPadX * 2;
+          const boxH = baseline - capTop + boxPadY * 2;
+          const centerX = Math.round(wordLeft + wordWidth / 2);
+          const centerY = Math.round((capTop + baseline) / 2);
+          const drawing = textMetrics.roundedRectDrawing(boxW, boxH, boxRadius);
+          boxDialogue = `CajaCapCut,,0,0,0,,{\\an5\\pos(${centerX},${centerY})\\fscx88\\fscy88\\alpha&H40&\\t(0,${speed},\\fscx100\\fscy100\\alpha&H00&)\\p1}${drawing}{\\p0}`;
+        } else {
+          // Respaldo: contorno grueso solo en la palabra activa (las demás ocupan su espacio pero son invisibles).
+          // Se anima la opacidad y no el grosor, porque animar \bord desplaza la línea en libass.
+          const boxTextParts = phrase.map((wt, i) => {
+            if (wt === activeWt) {
+              return `{\\3a&HC0&\\t(0,${speed},\\3a&H00&)}${cleanWords[i]}{\\3a&HFF&}`;
+            }
+            return cleanWords[i];
+          });
+          boxDialogue = `BordeEmergente,,0,0,0,,{\\pos(${X},${Y})\\3a&HFF&}${boxTextParts.join(' ')}`;
+        }
 
-        // Capa 2: Capa Activa (BordeEmergente) - Todas las letras transparentes, la palabra activa es opaca (sin zoom/escala)
-        const activeTextParts = phrase.map((wt) => {
-          if (wt === activeWt) {
-            return `{\\alpha&H00&}${wt.word.toUpperCase()}{\\alpha&HFF&}`;
-          } else {
-            return wt.word.toUpperCase();
-          }
-        });
-        const activeDialogueText = `{\\pos(${X},${Y})}{\\alpha&HFF&}${activeTextParts.join(' ')}`;
+        // Capa superior (Default): la frase completa con su contorno negro, incluida la palabra activa
+        const textDialogueText = `{\\pos(${X},${Y})}${lineText}`;
 
-        // Escribimos ambas capas en el mismo intervalo de tiempo
-        const layerPassive = dialogueIdx * 2;
-        const layerActive = dialogueIdx * 2 + 1;
-        assContent += `Dialogue: ${layerPassive},${wordStart},${wordEnd},Default,,0,0,0,,${passiveDialogueText}\n`;
-        assContent += `Dialogue: ${layerActive},${wordStart},${wordEnd},BordeEmergente,,0,0,0,,${activeDialogueText}\n`;
+        // Escribimos ambas capas en el mismo intervalo de tiempo (la caja debajo del texto)
+        const layerBox = dialogueIdx * 2;
+        const layerText = dialogueIdx * 2 + 1;
+        assContent += `Dialogue: ${layerBox},${wordStart},${wordEnd},${boxDialogue}\n`;
+        assContent += `Dialogue: ${layerText},${wordStart},${wordEnd},Default,,0,0,0,,${textDialogueText}\n`;
         dialogueIdx++;
       });
     });
@@ -605,6 +771,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
       }
     }
   }
+
+  // Capas de texto del mini editor de overlays (ej. "HISTORIA COMPLETA" arriba con bamboleo)
+  const lastWordEnd = timestamps.length > 0 ? timestamps[timestamps.length - 1].end + startOffset : 60;
+  assContent += buildTextLayerEvents(template.overlays, { resX, resY, videoEnd: lastWordEnd + 1 });
 
   try {
     fs.writeFileSync(outputPath, assContent, 'utf8');

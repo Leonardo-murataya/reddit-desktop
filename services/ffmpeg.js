@@ -77,7 +77,8 @@ function prepareOverlays(overlays, totalDuration) {
   if (!Array.isArray(overlays)) return [];
 
   return overlays
-    .filter(ov => ov && ov.enabled !== false && ov.file && fs.existsSync(ov.file))
+    // Las capas de texto se dibujan en el archivo de subtítulos .ass, no aquí
+    .filter(ov => ov && ov.type !== 'text' && ov.enabled !== false && ov.file && fs.existsSync(ov.file))
     .map(ov => {
       const isImage = OVERLAY_IMAGE_EXTS.includes(path.extname(ov.file).toLowerCase());
       const mediaDuration = isImage ? 0 : probeMediaDuration(ov.file);
@@ -110,10 +111,32 @@ function prepareOverlays(overlays, totalDuration) {
         scale: clampNumber(ov.scale, 0.02, 1.5, 0.6),
         posX: clampNumber(ov.posX, -0.5, 1.5, 0.5),
         posY: clampNumber(ov.posY, -0.5, 1.5, 0.8),
-        opacity: clampNumber(ov.opacity, 0, 1, 1)
+        opacity: clampNumber(ov.opacity, 0, 1, 1),
+        includeAudio: !isImage && !!ov.includeAudio && probeHasAudio(ov.file),
+        audioVolume: clampNumber(ov.audioVolume, -40, 10, 0)
       };
     })
     .filter(Boolean);
+}
+
+/**
+ * Indica si un archivo multimedia trae pista de audio (para el sonido propio de un overlay).
+ */
+function probeHasAudio(filePath) {
+  try {
+    const ffprobePath = require('ffprobe-static').path;
+    const { execFileSync } = require('child_process');
+    const out = execFileSync(ffprobePath, [
+      '-v', 'error',
+      '-select_streams', 'a',
+      '-show_entries', 'stream=index',
+      '-of', 'csv=p=0',
+      filePath
+    ], { encoding: 'utf8' }).trim();
+    return out.length > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -482,6 +505,7 @@ async function compileVideo(params, onProgress = () => {}) {
     }
 
     // E2. Overlays del mini editor: encima de todo, como la pista superior de un editor
+    const overlayAudioLabels = [];
     if (activeOverlays.length > 0) {
       const canvasWidth = aspectRatio === '16:9' ? 1920 : 1080;
       let currentLabel = preOverlayLabel;
@@ -502,12 +526,23 @@ async function compileVideo(params, onProgress = () => {}) {
           filterComplex += `${currentLabel}[ov${i}_${k}_t]overlay=x='W*${ov.posX}-w/2':y='H*${ov.posY}-h/2':eof_action=pass${outLabel};`;
           currentLabel = outLabel;
         });
+
+        // Sonido propio del overlay (ej. el "pop" del globo), retrasado a cada aparición
+        if (ov.includeAudio) {
+          const audioSplitLabels = ov.startTimes.map((_, k) => `[ova${i}_${k}]`).join('');
+          filterComplex += n > 1 ? `[${ov.inputIdx}:a]asplit=${n}${audioSplitLabels};` : `[${ov.inputIdx}:a]anull[ova${i}_0];`;
+          ov.startTimes.forEach((start, k) => {
+            const delayMs = Math.round(start * 1000);
+            filterComplex += `[ova${i}_${k}]atrim=duration=${ov.clipDuration},asetpts=PTS-STARTPTS,aresample=44100,aformat=channel_layouts=stereo,adelay=delays=${delayMs}:all=1,volume=${ov.audioVolume}dB[ova${i}_${k}_d];`;
+            overlayAudioLabels.push(`[ova${i}_${k}_d]`);
+          });
+        }
       });
     }
 
-    // F. Concatenar y mezclar los audios en orden (TTS + Música + Efectos de Sonido SFX)
+    // F. Concatenar y mezclar los audios en orden (TTS + Música + Efectos de Sonido SFX + sonidos de overlays)
     filterComplex += `[${S+1}:a][${S+2}:a]concat=n=2:v=0:a=1[a_tts];`;
-    const mixAudioStreams = ['[a_tts]'];
+    const mixAudioStreams = ['[a_tts]', ...overlayAudioLabels];
 
     if (hasMusic) {
       filterComplex += `[${musicInputIdx}:a]volume=${musicVolume}dB[a_music_vol];`;

@@ -3253,6 +3253,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                   overlays={overlays}
                   setOverlays={setOverlays}
                   previews={overlayPreviews}
+                  fonts={availableFonts}
                 />
 
                 {/* LIENZO EN VIVO: muestra dónde y de qué tamaño queda cada overlay */}

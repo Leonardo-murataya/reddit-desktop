@@ -756,7 +756,32 @@ export default function LiveCanvasStage({
           )}
 
           {/* Overlays del mini editor (posición y tamaño relativos al lienzo, igual que en FFmpeg) */}
-          {overlays.filter(ov => ov.enabled && overlayPreviews[ov.id]?.image).map(ov => (
+          {overlays.filter(ov => ov.type === 'text' && ov.enabled && ov.text).map(ov => {
+            // libass dibuja el em a ~0.6 del tamaño ASS en fuentes tipo Bangers; se aproxima igual aquí
+            const cssSize = Math.max(8, ov.fontSize * scale * 0.6);
+            return (
+              <div
+                key={ov.id}
+                className="absolute z-30 pointer-events-none select-none text-center whitespace-pre font-bold"
+                style={{
+                  left: `${ov.posX * 100}%`,
+                  top: `${ov.posY * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  fontFamily: ov.font,
+                  fontSize: `${cssSize}px`,
+                  lineHeight: 0.78,
+                  letterSpacing: `${(ov.letterSpacing || 0) * scale}px`,
+                  color: ov.color,
+                  WebkitTextStroke: `${Math.max(1, ov.outlineWidth * scale * 2)}px ${ov.outlineColor}`,
+                  paintOrder: 'stroke fill'
+                }}
+              >
+                {ov.text}
+              </div>
+            );
+          })}
+
+          {overlays.filter(ov => ov.type !== 'text' && ov.enabled && overlayPreviews[ov.id]?.image).map(ov => (
             <img
               key={ov.id}
               src={overlayPreviews[ov.id].image}
