@@ -143,6 +143,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   
   // Tarjeta de Reddit
   const [cardTheme, setCardTheme] = useState('dark');
+  const [cardEnabled, setCardEnabled] = useState(true);
   const [cardType, setCardType] = useState('static'); // 'static' (PNG fija) o 'animated' (Medallas GIF)
   const [cardUsername, setCardUsername] = useState('postfully_user');
   const [cardSubreddit, setCardSubreddit] = useState('r/AskReddit');
@@ -386,6 +387,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setAnimation(active.animation || 'tiktok-pop');
         setSubtitleBorderStyle(active.subtitleBorderStyle || 'outline');
         setCardTheme(active.cardTheme || 'dark');
+        setCardEnabled(active.cardEnabled !== false);
         setCardType(active.cardType || 'static');
         setCardUsername(active.cardUsername || 'postfully_user');
         setCardSubreddit(active.cardSubreddit || 'r/AskReddit');
@@ -598,6 +600,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setAnimation('tiktok-pop');
     setSubtitleBorderStyle('outline');
     setCardTheme('dark');
+    setCardEnabled(true);
     setCardType('static');
     setCardUsername('reddit_new');
     setCardSubreddit('r/nosleep');
@@ -1084,6 +1087,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       animation,
       subtitleBorderStyle,
       cardTheme,
+      cardEnabled,
       cardType: cardType || 'static',
       cardUsername,
       cardSubreddit,
@@ -1347,6 +1351,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       previewOrientation={previewOrientation}
       setPreviewOrientation={setPreviewOrientation}
       cardTheme={cardTheme}
+      cardEnabled={cardEnabled}
       cardType={cardType}
       cardUsername={cardUsername}
       cardSubreddit={cardSubreddit}
@@ -1724,7 +1729,23 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                     <Palette className="w-4 h-4 text-amber-400" />
                     <span>Propiedades del Reddit Card</span>
                   </h3>
-                  
+
+                  {/* Videos sin tarjeta: el título se narra igual, pero se muestra como subtítulo */}
+                  <div className="bg-black/20 p-4 rounded-xl border border-border-dark flex items-center justify-between gap-4">
+                    <div className="space-y-0.5">
+                      <label className="block text-[10px] font-bold text-gray-300 uppercase">Mostrar tarjeta al inicio</label>
+                      <p className="text-[9px] text-gray-500">
+                        Apágalo para hacer videos sin tarjeta: el título se sigue narrando, pero aparece como subtítulo desde el segundo 0.
+                      </p>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={cardEnabled}
+                      onChange={(e) => setCardEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded accent-amber-500 cursor-pointer shrink-0"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div className="space-y-1">
                       <label className="block text-[10px] font-bold text-gray-400">TEMA DEL CARD</label>

@@ -4,11 +4,24 @@ const subtitles = require('../services/subtitles');
 /**
  * Etapa 4 del Pipeline: Generación de Subtítulos Dinámicos (.ass)
  */
-async function executeSubtitleStage({ bodyTimestamps, template, titleDuration, formatMode, jobTempDir, videoNumStr, broadcastProgress, job, isCancelRequested }) {
+async function executeSubtitleStage({ bodyTimestamps: rawBodyTimestamps, titleTimestamps = [], template, titleDuration: rawTitleDuration, formatMode, jobTempDir, videoNumStr, broadcastProgress, job, isCancelRequested }) {
   job.stage = 'subtitles';
   job.currentStep = 'Generando subtítulos sincronizados';
 
   if (isCancelRequested()) throw new Error('La generación fue cancelada por solicitud del usuario.');
+
+  // Video sin tarjeta: el título no se muestra en el card, así que se subtitula igual que el cuerpo
+  let bodyTimestamps = rawBodyTimestamps;
+  let titleDuration = rawTitleDuration;
+  if (template.cardEnabled === false && Array.isArray(titleTimestamps) && titleTimestamps.length > 0) {
+    const shiftedBody = rawBodyTimestamps.map(wt => ({
+      ...wt,
+      start: wt.start + rawTitleDuration,
+      end: wt.end + rawTitleDuration
+    }));
+    bodyTimestamps = [...titleTimestamps.map(wt => ({ ...wt })), ...shiftedBody];
+    titleDuration = 0;
+  }
 
   if (formatMode === 'both') {
     const assPath916 = path.join(jobTempDir, 'subtitles_9_16.ass');

@@ -111,6 +111,7 @@ export default function LiveCanvasStage({
   watermarkImageOffsetY = 20,
   overlays = [],
   overlayPreviews = {},
+  cardEnabled = true,
 
   // Música
   musicEnabled = false,
@@ -314,9 +315,9 @@ export default function LiveCanvasStage({
   const isSubInBlockedZone = !isLand && (currSubY > 420 || currSubY < -420);
 
   // Visibilidad condicional según modo de estudio o simulación de timeline
-  const shouldShowCard = isPlayingTimeline
+  const shouldShowCard = cardEnabled && (isPlayingTimeline
     ? previewState !== 'subtitles'
-    : (stageViewMode === 'both' || stageViewMode === 'card');
+    : (stageViewMode === 'both' || stageViewMode === 'card'));
   const shouldShowSubtitles = isPlayingTimeline
     ? (previewState === 'subtitles' || previewState === 'idle')
     : (stageViewMode === 'both' || stageViewMode === 'subtitles');

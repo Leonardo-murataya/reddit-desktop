@@ -166,6 +166,7 @@ async function runSingleVideo({
     // -----------------------------------------------------------------
     const subtitleData = await executeSubtitleStage({
       bodyTimestamps: voiceData.bodyTimestamps,
+      titleTimestamps: voiceData.titleTimestamps,
       template,
       titleDuration: voiceData.titleDuration,
       formatMode,

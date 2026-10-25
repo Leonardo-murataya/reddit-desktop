@@ -240,7 +240,8 @@ async function compileVideo(params, onProgress = () => {}) {
       watermarkImageAlignment = 9,
       watermarkImageOffsetX = 20,
       watermarkImageOffsetY = 20,
-      overlays = []
+      overlays = [],
+      showCard = true
     } = params;
 
     const activeCardOffsetX = aspectRatio === '16:9' ? (params.cardOffsetX_16_9 !== undefined ? params.cardOffsetX_16_9 : 0) : cardOffsetX;
@@ -310,7 +311,7 @@ async function compileVideo(params, onProgress = () => {}) {
 
     let sfxInputIdx = -1;
     const possibleSfxPath = path.join(__dirname, '..', 'frontend', 'public', 'assets', 'sfx', `${cardSfxSound || 'whoosh'}.wav`);
-    const hasSfx = cardSfxEnabled && fs.existsSync(possibleSfxPath);
+    const hasSfx = showCard && cardSfxEnabled && fs.existsSync(possibleSfxPath);
     if (hasSfx) {
       args.push('-i', possibleSfxPath);
       sfxInputIdx = nextInputIdx++;
@@ -393,6 +394,9 @@ async function compileVideo(params, onProgress = () => {}) {
       ? 1920 * 0.40 * activeCardScale
       : 1080 * 0.74 * activeCardScale;
 
+    // Punto de corte: en videos sin tarjeta se descarta toda la cadena del card que sigue
+    const filterBeforeCard = filterComplex;
+
     let cardInputLabel = '[card_scaled]';
     filterComplex += `[${S}:v]scale=w=${Math.round(baseCardWidth)}:h=-2:flags=bicubic[card_scaled];`;
 
@@ -460,7 +464,12 @@ async function compileVideo(params, onProgress = () => {}) {
     yExpr = `if(lt(t,${safeEntryDuration}), ${entryY}, if(gt(t,${exitStartTime}), ${exitY}, ((H-h)/2)+${activeCardOffsetY}))`;
 
     // D. Superponer la tarjeta de Reddit (Title Card) sobre el fondo tratado
-    filterComplex += `${currentBgLabel}${cardLabel}overlay=x='${xExpr}':y='${yExpr}':enable='between(t,0,${titleDuration})'[v_overlaid];`;
+    if (showCard) {
+      filterComplex += `${currentBgLabel}${cardLabel}overlay=x='${xExpr}':y='${yExpr}':enable='between(t,0,${titleDuration})'[v_overlaid];`;
+    } else {
+      // Video sin tarjeta: el título se lee con subtítulos y la entrada del card queda sin usar
+      filterComplex = `${filterBeforeCard}${currentBgLabel}null[v_overlaid];`;
+    }
 
     // E. Quemar los subtítulos ASS sobre el video forzando codificación UTF-8 para acentos correctos en Windows
     const escapedSubPath = assSubtitlesPath.replace(/\\/g, '/').replace(/:/g, '\\:');

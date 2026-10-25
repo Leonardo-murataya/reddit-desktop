@@ -63,7 +63,8 @@ async function executeRenderStage({
     cardExitAnimation: template.cardExitAnimation || 'none',
     cardEntryDuration: template.cardEntryDuration !== undefined ? template.cardEntryDuration : 0.4,
     cardExitDuration: template.cardExitDuration !== undefined ? template.cardExitDuration : 0.4,
-    overlays: Array.isArray(template.overlays) ? template.overlays : []
+    overlays: Array.isArray(template.overlays) ? template.overlays : [],
+    showCard: template.cardEnabled !== false
   };
 
   if (formatMode === 'both') {
