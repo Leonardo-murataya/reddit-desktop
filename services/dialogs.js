@@ -279,7 +279,32 @@ function selectLocalAudio(title = 'Selecciona tu música de fondo') {
   return runPowerShellScript(psScript);
 }
 
+/**
+ * Lanza un diálogo para elegir un video o imagen de overlay (logo, globo con croma, etc.).
+ * @returns {string} Ruta absoluta del archivo o cadena vacía.
+ */
+function selectLocalOverlayMedia(title = 'Selecciona el video o imagen del overlay') {
+  if (process.platform !== 'win32') return '';
+
+  const psScript = `
+    Add-Type -AssemblyName System.Windows.Forms
+    [System.Windows.Forms.Application]::EnableVisualStyles()
+    $f = New-Object System.Windows.Forms.OpenFileDialog
+    $f.Filter = 'Video o imagen (*.mp4;*.mov;*.webm;*.mkv;*.gif;*.png;*.jpg;*.jpeg;*.webp)|*.mp4;*.mov;*.webm;*.mkv;*.gif;*.png;*.jpg;*.jpeg;*.webp|Todos los archivos (*.*)|*.*'
+    $f.Multiselect = $false
+    $f.AutoUpgradeEnabled = $true
+    $f.Title = ${psEscape(title)}
+    $result = $f.ShowDialog()
+    if ($result -eq [System.Windows.Forms.DialogResult]::OK) {
+      Write-Output $f.FileName
+    }
+  `;
+
+  return runPowerShellScript(psScript);
+}
+
 module.exports = {
+  selectLocalOverlayMedia,
   selectLocalFolder,
   selectLocalFiles,
   selectSaveLocation,

@@ -7,6 +7,7 @@ const db = require('../services/db');
 const dialogs = require('../services/dialogs');
 const timeline = require('../services/timeline');
 const tts = require('../services/tts');
+const ffmpeg = require('../services/ffmpeg');
 const { getStorageDir } = require('../pipeline/pipelineManager');
 
 const TEMP_DIR = getStorageDir('temp');
@@ -127,6 +128,29 @@ router.get('/dialog/watermark-image', (req, res) => {
   try {
     const imgData = dialogs.selectLocalImage('Selecciona la imagen de marca de agua');
     res.json(imgData || { path: '', base64: '' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/dialog/overlay-media', (req, res) => {
+  try {
+    const selectedFile = dialogs.selectLocalOverlayMedia();
+    res.json({ path: selectedFile || '' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Vista previa de un overlay con el croma aplicado (PNG transparente en base64)
+router.post('/overlays/preview', async (req, res) => {
+  try {
+    const { file, chromaEnabled, chromaColor, chromaSimilarity, chromaBlend } = req.body || {};
+    if (!file || typeof file !== 'string' || file.length > 1024) {
+      return res.status(400).json({ error: 'Ruta de overlay inválida.' });
+    }
+    const preview = await ffmpeg.renderOverlayPreview({ file, chromaEnabled, chromaColor, chromaSimilarity, chromaBlend });
+    res.json(preview);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

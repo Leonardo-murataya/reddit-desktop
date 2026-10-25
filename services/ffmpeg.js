@@ -31,6 +31,136 @@ function killActiveProcess() {
   return false;
 }
 
+const OVERLAY_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.bmp'];
+const MAX_OVERLAY_OCCURRENCES = 30;
+
+/**
+ * Obtiene la duración de un archivo multimedia con ffprobe (0 si no se puede leer).
+ */
+function probeMediaDuration(filePath) {
+  try {
+    const ffprobePath = require('ffprobe-static').path;
+    const { execFileSync } = require('child_process');
+    const out = execFileSync(ffprobePath, [
+      '-v', 'error',
+      '-show_entries', 'format=duration',
+      '-of', 'default=noprint_wrappers=1:nokey=1',
+      filePath
+    ], { encoding: 'utf8' }).trim();
+    const dur = parseFloat(out);
+    return isNaN(dur) ? 0 : dur;
+  } catch (err) {
+    console.warn(`[Overlays] No se pudo leer la duración de ${filePath}:`, err.message);
+    return 0;
+  }
+}
+
+/**
+ * Convierte '#00FF00' al formato 0x00FF00 que espera el filtro chromakey.
+ */
+function hexToFfmpegColor(hex) {
+  const clean = String(hex || '#00FF00').replace('#', '').trim();
+  return /^[0-9a-fA-F]{6}$/.test(clean) ? `0x${clean.toUpperCase()}` : '0x00FF00';
+}
+
+function clampNumber(value, min, max, fallback) {
+  const num = parseFloat(value);
+  if (isNaN(num)) return fallback;
+  return Math.min(max, Math.max(min, num));
+}
+
+/**
+ * Normaliza los overlays de la plantilla y calcula en qué segundos aparece cada uno.
+ * Descarta los desactivados, los que no tienen archivo o los que empiezan después del final.
+ */
+function prepareOverlays(overlays, totalDuration) {
+  if (!Array.isArray(overlays)) return [];
+
+  return overlays
+    .filter(ov => ov && ov.enabled !== false && ov.file && fs.existsSync(ov.file))
+    .map(ov => {
+      const isImage = OVERLAY_IMAGE_EXTS.includes(path.extname(ov.file).toLowerCase());
+      const mediaDuration = isImage ? 0 : probeMediaDuration(ov.file);
+      const requested = clampNumber(ov.duration, 0, 600, 0);
+
+      // Imágenes: duración pedida (5s por defecto). Videos: el clip completo o lo que se pida, lo que sea menor.
+      let clipDuration = isImage
+        ? (requested > 0 ? requested : 5)
+        : (requested > 0 && mediaDuration > 0 ? Math.min(requested, mediaDuration) : mediaDuration);
+      if (!clipDuration || clipDuration <= 0) return null;
+
+      const startTime = clampNumber(ov.startTime, 0, 36000, 0);
+      const repeatEvery = clampNumber(ov.repeatEvery, 0, 36000, 0);
+      const startTimes = [];
+      for (let t = startTime; t < totalDuration && startTimes.length < MAX_OVERLAY_OCCURRENCES; t += repeatEvery) {
+        startTimes.push(Number(t.toFixed(3)));
+        if (repeatEvery <= 0) break;
+      }
+      if (startTimes.length === 0) return null;
+
+      return {
+        file: ov.file,
+        isImage,
+        clipDuration: Number(clipDuration.toFixed(3)),
+        startTimes,
+        chromaEnabled: !!ov.chromaEnabled,
+        chromaColor: hexToFfmpegColor(ov.chromaColor),
+        chromaSimilarity: clampNumber(ov.chromaSimilarity, 0.01, 1, 0.25),
+        chromaBlend: clampNumber(ov.chromaBlend, 0, 1, 0.08),
+        scale: clampNumber(ov.scale, 0.02, 1.5, 0.6),
+        posX: clampNumber(ov.posX, -0.5, 1.5, 0.5),
+        posY: clampNumber(ov.posY, -0.5, 1.5, 0.8),
+        opacity: clampNumber(ov.opacity, 0, 1, 1)
+      };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Genera un PNG transparente de un cuadro del overlay con el croma aplicado,
+ * para mostrarlo en la vista previa del editor de plantillas.
+ * @returns {Promise<{image: string, duration: number, isImage: boolean}>}
+ */
+function renderOverlayPreview({ file, chromaEnabled, chromaColor, chromaSimilarity, chromaBlend }) {
+  return new Promise((resolve, reject) => {
+    if (!file || !fs.existsSync(file)) {
+      return reject(new Error('El archivo del overlay no existe.'));
+    }
+    const isImage = OVERLAY_IMAGE_EXTS.includes(path.extname(file).toLowerCase());
+    const duration = isImage ? 0 : probeMediaDuration(file);
+    const seekTime = isImage ? 0 : Math.min(2, duration / 2);
+    const keyFilter = chromaEnabled
+      ? `chromakey=${hexToFfmpegColor(chromaColor)}:${clampNumber(chromaSimilarity, 0.01, 1, 0.25)}:${clampNumber(chromaBlend, 0, 1, 0.08)},`
+      : '';
+
+    const args = [
+      '-v', 'error',
+      ...(isImage ? [] : ['-ss', seekTime.toString()]),
+      '-i', file,
+      '-frames:v', '1',
+      '-vf', `${keyFilter}format=rgba,scale=w='min(720,iw)':h=-2`,
+      '-f', 'image2pipe', '-vcodec', 'png', 'pipe:1'
+    ];
+
+    const proc = spawn(ffmpegPath, args, { windowsHide: true });
+    const chunks = [];
+    let stderr = '';
+    proc.stdout.on('data', d => chunks.push(d));
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.on('error', reject);
+    proc.on('close', code => {
+      if (code !== 0 || chunks.length === 0) {
+        return reject(new Error(stderr.trim() || 'No se pudo generar la vista previa del overlay.'));
+      }
+      resolve({
+        image: `data:image/png;base64,${Buffer.concat(chunks).toString('base64')}`,
+        duration: Number(duration.toFixed(2)),
+        isImage
+      });
+    });
+  });
+}
+
 /**
  * Compila el video completo usando FFmpeg combinando fondo, card, audios y subtítulos.
  * @param {object} params - Parámetros de renderizado
@@ -86,7 +216,8 @@ async function compileVideo(params, onProgress = () => {}) {
       watermarkImageOpacity = 0.5,
       watermarkImageAlignment = 9,
       watermarkImageOffsetX = 20,
-      watermarkImageOffsetY = 20
+      watermarkImageOffsetY = 20,
+      overlays = []
     } = params;
 
     const activeCardOffsetX = aspectRatio === '16:9' ? (params.cardOffsetX_16_9 !== undefined ? params.cardOffsetX_16_9 : 0) : cardOffsetX;
@@ -168,6 +299,18 @@ async function compileVideo(params, onProgress = () => {}) {
       args.push('-i', watermarkImageFile);
       watermarkInputIdx = nextInputIdx++;
     }
+
+    // Overlays personalizados (logos, globos con croma, etc.) del mini editor
+    const activeOverlays = prepareOverlays(overlays, totalDuration);
+    for (const ov of activeOverlays) {
+      if (ov.isImage) {
+        args.push('-loop', '1', '-t', ov.clipDuration.toString(), '-i', ov.file);
+      } else {
+        args.push('-i', ov.file);
+      }
+      ov.inputIdx = nextInputIdx++;
+    }
+    const preOverlayLabel = activeOverlays.length > 0 ? '[v_pre_overlays]' : '[v_final]';
 
     // 4. Diseñar el filtro complejo (-filter_complex)
     let filterComplex = '';
@@ -333,9 +476,33 @@ async function compileVideo(params, onProgress = () => {}) {
         yExpr = `(H-h)/2`;
       }
       
-      filterComplex += `[v_subtitled][wm_processed]overlay=x='${xExpr}':y='${yExpr}'[v_final];`;
+      filterComplex += `[v_subtitled][wm_processed]overlay=x='${xExpr}':y='${yExpr}'${preOverlayLabel};`;
     } else {
-      filterComplex += `[v_overlaid]subtitles='${escapedSubPath}':charenc=UTF-8:fontsdir='${fontsDir}'[v_final];`;
+      filterComplex += `[v_overlaid]subtitles='${escapedSubPath}':charenc=UTF-8:fontsdir='${fontsDir}'${preOverlayLabel};`;
+    }
+
+    // E2. Overlays del mini editor: encima de todo, como la pista superior de un editor
+    if (activeOverlays.length > 0) {
+      const canvasWidth = aspectRatio === '16:9' ? 1920 : 1080;
+      let currentLabel = preOverlayLabel;
+      activeOverlays.forEach((ov, i) => {
+        const targetWidth = Math.max(2, Math.round(canvasWidth * ov.scale / 2) * 2);
+        const keyFilter = ov.chromaEnabled
+          ? `chromakey=${ov.chromaColor}:${ov.chromaSimilarity}:${ov.chromaBlend},`
+          : '';
+        const n = ov.startTimes.length;
+        const splitLabels = ov.startTimes.map((_, k) => `[ov${i}_${k}]`).join('');
+        filterComplex += `[${ov.inputIdx}:v]${keyFilter}format=rgba,scale=w=${targetWidth}:h=-2:flags=lanczos,colorchannelmixer=aa=${ov.opacity}`;
+        filterComplex += n > 1 ? `,split=${n}${splitLabels};` : `[ov${i}_0];`;
+
+        ov.startTimes.forEach((start, k) => {
+          const isLast = i === activeOverlays.length - 1 && k === n - 1;
+          const outLabel = isLast ? '[v_final]' : `[v_ov${i}_${k}]`;
+          filterComplex += `[ov${i}_${k}]trim=duration=${ov.clipDuration},setpts=PTS-STARTPTS+${start}/TB[ov${i}_${k}_t];`;
+          filterComplex += `${currentLabel}[ov${i}_${k}_t]overlay=x='W*${ov.posX}-w/2':y='H*${ov.posY}-h/2':eof_action=pass${outLabel};`;
+          currentLabel = outLabel;
+        });
+      });
     }
 
     // F. Concatenar y mezclar los audios en orden (TTS + Música + Efectos de Sonido SFX)
@@ -597,5 +764,6 @@ async function compileVideo(params, onProgress = () => {}) {
 
 module.exports = {
   compileVideo,
-  killActiveProcess
+  killActiveProcess,
+  renderOverlayPreview
 };

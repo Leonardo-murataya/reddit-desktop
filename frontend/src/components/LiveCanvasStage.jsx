@@ -109,6 +109,8 @@ export default function LiveCanvasStage({
   watermarkImageAlignment = 9,
   watermarkImageOffsetX = 20,
   watermarkImageOffsetY = 20,
+  overlays = [],
+  overlayPreviews = {},
 
   // Música
   musicEnabled = false,
@@ -752,6 +754,23 @@ export default function LiveCanvasStage({
               )}
             </div>
           )}
+
+          {/* Overlays del mini editor (posición y tamaño relativos al lienzo, igual que en FFmpeg) */}
+          {overlays.filter(ov => ov.enabled && overlayPreviews[ov.id]?.image).map(ov => (
+            <img
+              key={ov.id}
+              src={overlayPreviews[ov.id].image}
+              alt={ov.name}
+              className="absolute z-30 pointer-events-none select-none"
+              style={{
+                left: `${ov.posX * 100}%`,
+                top: `${ov.posY * 100}%`,
+                width: `${ov.scale * 100}%`,
+                transform: 'translate(-50%, -50%)',
+                opacity: ov.opacity
+              }}
+            />
+          ))}
 
           {/* 4. ELEMENTO 1: TARJETA DE REDDIT INTERACTIVA (1:1 WYSIWYG) */}
           {shouldShowCard && (

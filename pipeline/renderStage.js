@@ -62,7 +62,8 @@ async function executeRenderStage({
     cardEntryAnimation: template.cardEntryAnimation || 'none',
     cardExitAnimation: template.cardExitAnimation || 'none',
     cardEntryDuration: template.cardEntryDuration !== undefined ? template.cardEntryDuration : 0.4,
-    cardExitDuration: template.cardExitDuration !== undefined ? template.cardExitDuration : 0.4
+    cardExitDuration: template.cardExitDuration !== undefined ? template.cardExitDuration : 0.4,
+    overlays: Array.isArray(template.overlays) ? template.overlays : []
   };
 
   if (formatMode === 'both') {

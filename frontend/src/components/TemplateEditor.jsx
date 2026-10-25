@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Save, Plus, Trash2, Palette, Volume2, Type, Move, Upload, Eye, Zap, Play, RotateCcw, VolumeX, Sparkles, Download, Shield, Music, AlertTriangle, FolderOpen, Users, Info, Layers, Film, Clock, Square } from 'lucide-react';
 import AwardPickerModal from './AwardPickerModal';
 import LiveCanvasStage from './LiveCanvasStage';
+import OverlaysPanel, { normalizeOverlays, useOverlayPreviews } from './OverlaysPanel';
 import { useUIModal } from '../context/UIModalContext';
 
 const EDGE_VOICES = [
@@ -264,6 +265,10 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
   // Estados de la marca de agua con imagen
   const [watermarkType, setWatermarkType] = useState('text'); // 'text' | 'image'
   const [watermarkImageFile, setWatermarkImageFile] = useState('');
+
+  // Overlays del mini editor (logos / globos con croma)
+  const [overlays, setOverlays] = useState([]);
+  const overlayPreviews = useOverlayPreviews(overlays);
   const [watermarkImageScale, setWatermarkImageScale] = useState(0.15);
   const [watermarkImageOpacity, setWatermarkImageOpacity] = useState(0.5);
   const [watermarkImageAlignment, setWatermarkImageAlignment] = useState(9);
@@ -455,6 +460,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
         setVignetteStrength(active.vignetteStrength !== undefined ? active.vignetteStrength : 0);
         setBackgroundSaturation(active.backgroundSaturation !== undefined ? active.backgroundSaturation : 1.15);
         setBackgroundContrast(active.backgroundContrast !== undefined ? active.backgroundContrast : 1.05);
+        setOverlays(normalizeOverlays(active.overlays));
     }
   }, [selectedId, templates]);
 
@@ -664,6 +670,7 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
     setVignetteStrength(0);
     setBackgroundSaturation(1.15);
     setBackgroundContrast(1.05);
+    setOverlays([]);
 
     setPreviewState('idle');
     setIsPlayingTimeline(false);
@@ -1148,7 +1155,10 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       backgroundBlurMode,
       vignetteStrength: parseFloat(vignetteStrength),
       backgroundSaturation: parseFloat(backgroundSaturation),
-      backgroundContrast: parseFloat(backgroundContrast)
+      backgroundContrast: parseFloat(backgroundContrast),
+
+      // Overlays del mini editor
+      overlays
     });
 
     if (saved && saved.error) {
@@ -1412,6 +1422,8 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
       watermarkImageAlignment={watermarkImageAlignment}
       watermarkImageOffsetX={watermarkImageOffsetX}
       watermarkImageOffsetY={watermarkImageOffsetY}
+      overlays={overlays}
+      overlayPreviews={overlayPreviews}
       musicEnabled={musicEnabled}
       musicVolume={musicVolume}
       previewState={previewState}
@@ -1689,6 +1701,18 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
               >
                 <Sparkles className="w-4 h-4 text-purple-400" />
                 <span>7. Cinemática & SFX</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('overlays')}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 text-xs font-black rounded-lg transition-all cursor-pointer ${
+                  activeTab === 'overlays'
+                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shadow-lg'
+                    : 'text-gray-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>8. Overlays</span>
               </button>
             </div>
 
@@ -3219,6 +3243,20 @@ export default function TemplateEditor({ templates, profiles = [], onSave, onDel
                     </button>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {/* CONTENIDO PESTAÑA OVERLAYS (MINI EDITOR CON CROMA) */}
+            {activeTab === 'overlays' && (
+              <div className="space-y-6">
+                <OverlaysPanel
+                  overlays={overlays}
+                  setOverlays={setOverlays}
+                  previews={overlayPreviews}
+                />
+
+                {/* LIENZO EN VIVO: muestra dónde y de qué tamaño queda cada overlay */}
+                {renderLiveCanvasStage('both')}
               </div>
             )}
 
