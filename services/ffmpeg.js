@@ -555,10 +555,14 @@ async function compileVideo(params, onProgress = () => {}) {
     }
 
     if (mixAudioStreams.length > 1) {
-      filterComplex += `${mixAudioStreams.join('')}amix=inputs=${mixAudioStreams.length}:duration=first:dropout_transition=2:normalize=0[a_final]`;
+      filterComplex += `${mixAudioStreams.join('')}amix=inputs=${mixAudioStreams.length}:duration=first:dropout_transition=2:normalize=0[a_mix];`;
     } else {
-      filterComplex += `[a_tts]anull[a_final]`;
+      filterComplex += `[a_tts]anull[a_mix];`;
     }
+
+    // G. Normalizar el volumen a -14 LUFS (nivel de un export de CapCut / estándar de redes sociales).
+    // Edge-TTS entrega la voz muy baja (~-22 LUFS); sin esto el video suena a la mitad de volumen.
+    filterComplex += `[a_mix]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=44100[a_final]`;
 
     args.push('-filter_complex', filterComplex);
 
