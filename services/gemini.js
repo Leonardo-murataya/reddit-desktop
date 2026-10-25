@@ -1,5 +1,32 @@
 const { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } = require('@google/generative-ai');
 
+// Límite del título: también se usa como descripción en Facebook (título + hashtags),
+// y Facebook recomienda descripciones de 200 a 400 caracteres.
+const TITLE_MAX_CHARS = 200;
+const TITLE_IDEAL_MIN_CHARS = 120;
+const TITLE_IDEAL_MAX_CHARS = 180;
+
+/**
+ * Recorta un título que excede el máximo sin cortar palabras a la mitad:
+ * primero en el último fin de frase o coma antes del límite y, si no hay, en el último espacio con "…".
+ */
+function limitTitleLength(title, maxChars = TITLE_MAX_CHARS) {
+  const clean = String(title || '').replace(/\s+/g, ' ').trim();
+  if (clean.length <= maxChars) return clean;
+
+  const slice = clean.slice(0, maxChars);
+  const minUseful = Math.floor(maxChars * 0.5);
+  const sentenceEnd = Math.max(slice.lastIndexOf('. '), slice.lastIndexOf('… '), slice.lastIndexOf('! '), slice.lastIndexOf('? '));
+  if (sentenceEnd >= minUseful) return slice.slice(0, sentenceEnd + 1).trim();
+
+  // Una coma solo sirve de corte si conserva la mayor parte del título (si no, se pierde el gancho)
+  const clauseEnd = Math.max(slice.lastIndexOf(', '), slice.lastIndexOf('; '));
+  if (clauseEnd >= Math.floor(maxChars * 0.7)) return `${slice.slice(0, clauseEnd).trim()}…`;
+
+  const lastSpace = slice.slice(0, maxChars - 1).lastIndexOf(' ');
+  return `${slice.slice(0, lastSpace > 0 ? lastSpace : maxChars - 1).trim()}…`;
+}
+
 // Mapa dinámico en memoria para registrar modelos temporalmente agotados o sobrecargados
 const exhaustedModels = new Map(); // modelName -> expiryTimestamp
 
@@ -281,7 +308,7 @@ async function generateStory(
     properties: {
       title: {
         type: 'STRING',
-        description: 'Un título corto, extremadamente llamativo e intrigante de la historia de Reddit (máximo 15 palabras).'
+        description: `Un título extremadamente llamativo e intrigante de la historia de Reddit, de entre ${TITLE_IDEAL_MIN_CHARS} y ${TITLE_IDEAL_MAX_CHARS} caracteres y NUNCA más de ${TITLE_MAX_CHARS} caracteres contando espacios (se usa también como descripción de la publicación en Facebook).`
       },
       dialogues: {
         type: 'ARRAY',
@@ -318,7 +345,7 @@ async function generateStory(
     properties: {
       title: {
         type: 'STRING',
-        description: 'Un título corto, extremadamente llamativo e intrigante de la historia de Reddit (máximo 15 palabras).'
+        description: `Un título extremadamente llamativo e intrigante de la historia de Reddit, de entre ${TITLE_IDEAL_MIN_CHARS} y ${TITLE_IDEAL_MAX_CHARS} caracteres y NUNCA más de ${TITLE_MAX_CHARS} caracteres contando espacios (se usa también como descripción de la publicación en Facebook).`
       },
       content: {
         type: 'STRING',
@@ -341,6 +368,7 @@ Reglas estrictas de redacción:
 - Debe parecer una publicación real de Reddit en foros como r/nosleep, r/confessions, o r/AskReddit.
 - Empieza directamente con el relato, sin introducciones decorativas como "Aquí tienes tu historia".
 - Evita caracteres especiales extraños o emojis, ya que esto será leído por un sintetizador de voz (TTS).
+- LÍMITE DEL TÍTULO: el título debe tener entre ${TITLE_IDEAL_MIN_CHARS} y ${TITLE_IDEAL_MAX_CHARS} caracteres y jamás superar ${TITLE_MAX_CHARS} caracteres (contando espacios). Si tu idea es más larga, condénsala sin perder el gancho.
 - REQUISITO CRÍTICO DE EXTENSIÓN: Desarrolla el relato con máxima minuciosidad y progresión dramática, detallando los acontecimientos día a día, las confrontaciones y los giros para cumplir rigurosamente con la meta de palabras indicada en tus instrucciones del sistema. No resumas ni apresures el desenlace; desglosa los hechos con la amplitud necesaria para alcanzar la extensión completa requerida.
 `;
 
@@ -439,7 +467,7 @@ Reglas estrictas de redacción:
           .replace(/\bANOS\b/g, 'AÑOS');
       };
 
-      if (storyData.title) storyData.title = fixSpelling(storyData.title);
+      if (storyData.title) storyData.title = limitTitleLength(fixSpelling(storyData.title));
       if (storyData.content) storyData.content = fixSpelling(storyData.content);
       if (Array.isArray(storyData.dialogues)) {
         storyData.dialogues = storyData.dialogues.map(d => ({
