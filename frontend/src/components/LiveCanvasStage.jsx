@@ -756,27 +756,75 @@ export default function LiveCanvasStage({
           )}
 
           {/* Overlays del mini editor (posición y tamaño relativos al lienzo, igual que en FFmpeg) */}
+          {/* Animaciones de las capas de texto (en la vista previa se repiten en bucle para poder verlas) */}
+          <style>{`
+            @keyframes ovTextWiggle { 0% { transform: rotate(var(--w1)); } 33% { transform: rotate(var(--w2)); } 66% { transform: rotate(var(--w3)); } 100% { transform: rotate(var(--w1)); } }
+            @keyframes ovTextPop { 0% { transform: scale(0.3); opacity: 0; } 6% { transform: scale(1.12); opacity: 1; } 10% { transform: scale(1); } 88% { opacity: 1; } 100% { transform: scale(1); opacity: 0; } }
+            @keyframes ovTextPulse { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+            @keyframes ovTextSlide { 0% { transform: translateY(-150%); opacity: 0; } 10% { transform: translateY(0); opacity: 1; } 88% { opacity: 1; } 100% { transform: translateY(0); opacity: 0; } }
+            @keyframes ovTextFade { 0% { opacity: 0; } 12% { opacity: 1; } 88% { opacity: 1; } 100% { opacity: 0; } }
+          `}</style>
+
           {overlays.filter(ov => ov.type === 'text' && ov.enabled && ov.text).map(ov => {
             // libass dibuja el em a ~0.6 del tamaño ASS en fuentes tipo Bangers; se aproxima igual aquí
             const cssSize = Math.max(8, ov.fontSize * scale * 0.6);
+            const layerAnimation = {
+              pop: 'ovTextPop 3s ease-out infinite',
+              pulse: 'ovTextPulse 0.5s ease-in-out infinite alternate',
+              'slide-down': 'ovTextSlide 3s ease-out infinite',
+              fade: 'ovTextFade 3s linear infinite'
+            }[ov.animation] || 'none';
+            let letterIndex = 0;
             return (
               <div
                 key={ov.id}
-                className="absolute z-30 pointer-events-none select-none text-center whitespace-pre font-bold"
+                className="absolute z-30 pointer-events-none select-none"
                 style={{
                   left: `${ov.posX * 100}%`,
                   top: `${ov.posY * 100}%`,
-                  transform: 'translate(-50%, -50%)',
-                  fontFamily: ov.font,
-                  fontSize: `${cssSize}px`,
-                  lineHeight: 0.78,
-                  letterSpacing: `${(ov.letterSpacing || 0) * scale}px`,
-                  color: ov.color,
-                  WebkitTextStroke: `${Math.max(1, ov.outlineWidth * scale * 2)}px ${ov.outlineColor}`,
-                  paintOrder: 'stroke fill'
+                  transform: 'translate(-50%, -50%)'
                 }}
               >
-                {ov.text}
+                <div
+                  className="text-center whitespace-pre font-bold"
+                  style={{
+                    animation: layerAnimation,
+                    fontFamily: ov.font,
+                    fontSize: `${cssSize}px`,
+                    lineHeight: 0.78,
+                    letterSpacing: `${(ov.letterSpacing || 0) * scale}px`,
+                    color: ov.color,
+                    WebkitTextStroke: `${Math.max(1, ov.outlineWidth * scale * 2)}px ${ov.outlineColor}`,
+                    paintOrder: 'stroke fill'
+                  }}
+                >
+                  {ov.animation === 'wiggle'
+                    ? String(ov.text).split('\n').map((line, li) => (
+                      <div key={li}>
+                        {[...line].map((ch, ci) => {
+                          // Ángulos pseudoaleatorios fijos por letra, como el bamboleo del render
+                          const n = letterIndex++;
+                          const angle = (k) => `${(((n * 37 + k * 53) % 15) - 7)}deg`;
+                          return (
+                            <span
+                              key={ci}
+                              style={{
+                                display: 'inline-block',
+                                whiteSpace: 'pre',
+                                '--w1': angle(1),
+                                '--w2': angle(2),
+                                '--w3': angle(3),
+                                animation: `ovTextWiggle ${0.42 + (n % 4) * 0.06}s linear infinite`
+                              }}
+                            >
+                              {ch}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    ))
+                    : ov.text}
+                </div>
               </div>
             );
           })}
